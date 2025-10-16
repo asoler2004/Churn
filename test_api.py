@@ -1,42 +1,33 @@
 import requests
 import json
+import shap
+
 
 # Test data - example customer
 test_customer = {
-    "age": 35,
-    "housing": "own",
-    "credit_score": 350.5,
-    "deposits": 1,
-    "withdrawal": 1,
-    "purchases_partners": 0,
-    "purchases": 0,
-    "cc_taken": 1,
-    "cc_recommended": 0,
-    "cc_disliked": 10,
-    "cc_liked": 0,
-    "cc_application_begin": 1,
-    "app_downloaded": 0,
-    "web_user": 0,
-    "app_web_user": 0,
-    "ios_user": 1,
-    "android_user": 0,
+    "purchases_partners": 190,
+    "reward_rate": 74.0,
+    "cc_recommended": 80,
+    "web_user": 1,
+    "received_loan": 1,
+    "credit_score": 800.0,
+    "age": 65,
+    "deposits": 100,
+    "withdrawal": 10,
+    "is_referred": 1,
     "registered_phones": 1,
-    "payment_type": "credit_card",
+    "ios_user": 1,
     "waiting_4_loan": 0,
     "cancelled_loan": 0,
-    "received_loan": 0,
-    "rejected_loan": 1,
-    "zodiac_sign": "pisces",
-    "left_for_two_month_plus": 1,
+    "rejected_loan": 0,
+    "left_for_two_month_plus": 0,
     "left_for_one_month": 0,
-    "rewards_earned": 0,
-    "reward_rate": 0.0,
-    "is_referred": 0
 }
 
 def test_api():
     """Test the churn prediction API"""
     base_url = "http://localhost:8000"
+    # base_url = "https://fastapi-example-production-8493.up.railway.app"
     
     # Test health endpoint
     try:
@@ -57,9 +48,27 @@ def test_api():
         if response.status_code == 200:
             result = response.json()
             print("\nPrediction Result:")
-            print(f"Churn Probability: {result['churn_probability']:.4f}")
-            print(f"Churn Prediction: {result['churn_prediction']}")
-            print(f"Risk Level: {result['risk_level']}")
+
+            print("*******************************")    
+            print("Predicción de XGBoost")
+            print("*******************************")
+            print(f"Churn Probability: {result['churn_probability_XGB']:.4f}")
+            print(f"Churn Prediction: {result['churn_prediction_XGB']}")
+            print(f"Risk Level: {result['risk_level_XGB']}")
+            print(f"Shap_values: {result['shap_values_XGB']}")
+            print(f"Shap_base: {result['base_values_XGB']}")
+            print("*******************************")
+            print("Predicción de Random Forest")
+            print("*******************************")
+            print(f"Churn Probability: {result['churn_probability_RF']:.4f}")
+            print(f"Churn Prediction: {result['churn_prediction_RF']}")
+            print(f"Risk Level: {result['risk_level_RF']}")
+            print(f"Shap_values: {result['shap_values_RF']}")
+            print(f"Shap_base: {result['base_values_RF']}")
+
+            print(f"customer data: {result['customerdata']}")
+            print(f"processed data: {result['processeddata']}")
+     
         else:
             print(f"Error: {response.status_code} - {response.text}")
             
@@ -73,7 +82,7 @@ def test_api():
             info = response.json()
             print(f"\nModel Info:")
             print(f"Feature count: {len(info['feature_columns'])}")
-            print(f"Categorical columns: {list(info['categorical_encodings'].keys())}")
+            # print(f"Categorical columns: {list(info['categorical_encodings'].keys())}")
         else:
             print(f"Error getting model info: {response.status_code}")
     except Exception as e:
