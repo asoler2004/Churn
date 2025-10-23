@@ -1,139 +1,151 @@
-# 🏦 Fintech Churn Prediction System
+# 🏦 Sistema de Predicción de Abandono Fintech
 
-A comprehensive machine learning system for predicting customer churn with an interactive dashboard, real-time API, and AI-powered insights.
+Un sistema integral de aprendizaje automático para predecir el abandono de clientes con un panel interactivo, API en tiempo real e insights impulsados por IA.
 
-## 🌟 Features
+## 🌟 Características
 
-### Core ML System
-- XGBoost classifier for churn prediction
-- FastAPI-based REST API for real-time predictions
-- Flexible categorical encoding: LabelEncoder or OneHotEncoder
-- Automatic preprocessing of categorical variables
-- Model performance evaluation
-- Risk level classification (Low/Medium/High)
+### Sistema ML Principal
+- Clasificador XGBoost para predicción de abandono
+- API REST basada en FastAPI para predicciones en tiempo real
+- Codificación categórica flexible: LabelEncoder o OneHotEncoder
+- Preprocesamiento automático de variables categóricas
+- Evaluación del rendimiento del modelo
+- Clasificación de nivel de riesgo (Bajo/Medio/Alto)
 
-### Interactive Dashboards
-**Taipy Dashboard** (`churn_ui.py`)
-- 📊 Data management with filtering and customer addition
-- 🤖 Real-time churn prediction interface
-- 💡 AI-powered customer retention insights
-- 📈 SHAP explainability plots
-- 🔍 Customer data exploration and analysis
+### Paneles Interactivos
+**Panel Taipy** (`churn_ui.py`)
+- 📊 Gestión de datos con filtrado y adición de clientes
+- 🤖 Interfaz de predicción de abandono en tiempo real
+- 💡 Insights de retención de clientes impulsados por IA
+- 📈 Gráficos de explicabilidad SHAP
+- 🔍 Exploración y análisis de datos de clientes
 
-**Streamlit Dashboard** (`streamlit_ui.py`)
-- 🎨 Modern, responsive web interface
-- 📊 Interactive data tables with AgGrid
-- 📈 Advanced visualizations with Plotly
-- 🎯 Customer profile radar charts
-- 🔢 Risk gauge indicators
-- 📱 Mobile-friendly design
+**Panel Streamlit** (`streamlit_ui.py`)
+- 🎨 Interfaz web moderna y responsiva
+- 📊 Tablas de datos interactivas con AgGrid
+- 📈 Visualizaciones avanzadas con Plotly
+- 🎯 Gráficos de radar de perfil de cliente
+- 🔢 Indicadores de medidor de riesgo
+- 📱 Diseño amigable para móviles
 
-### AI Insights Engine
-- LLM-powered customer retention recommendations
-- Personalized action items based on customer profile
-- Risk-based intervention strategies
-- Behavioral pattern analysis
+### Motor de Insights de IA
+- Recomendaciones de retención de clientes impulsadas por LLM
+- Elementos de acción personalizados basados en el perfil del cliente
+- Estrategias de intervención basadas en riesgo
+- Análisis de patrones de comportamiento
 
-## 🚀 Quick Start
+## 🚀 Inicio Rápido
 
-### 1. Install Dependencies
+### 1. Instalar Dependencias
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Train the Model
+### 2. Entrenar el Modelo
 ```bash
 python train_model.py
 ```
 
-**Encoding Options:**
-- Edit `train_model.py` and set `use_onehot = True` for OneHotEncoder
-- Set `use_onehot = False` for LabelEncoder (default)
+**Opciones de Codificación:**
+- Edita `train_model.py` y establece `use_onehot = True` para OneHotEncoder
+- Establece `use_onehot = False` para LabelEncoder (por defecto)
 
-### 3. Start All Services
+### 3. Iniciar Todos los Servicios
 
-**Option A: Taipy Dashboard (Default)**
+**Opción A: Panel Taipy (Por defecto)**
 ```bash
 python start_services.py
 ```
 
-**Option B: Streamlit Dashboard**
+**Opción B: Panel Streamlit**
 ```bash
 python start_services.py --ui streamlit
 ```
 
-**Option C: Streamlit Only**
+**Opción C: Solo Streamlit**
 ```bash
 python run_streamlit.py
 ```
 
-This starts:
-- 🤖 Churn Prediction API (port 8000)
-- 💡 LLM Insights API (port 8001)  
-- 📊 Dashboard (Taipy: port 5000, Streamlit: port 8501)
+Esto inicia:
+- 🤖 API de Predicción de Abandono (puerto 8000)
+- 💡 API de Insights LLM (puerto 8001)  
+- 📊 Panel (Taipy: puerto 5000, Streamlit: puerto 8501)
 
-### 4. Access the Dashboard
+### 4. Acceder al Panel
 - **Taipy**: `http://localhost:5000`
 - **Streamlit**: `http://localhost:8501`
 
-## 📋 Manual Setup (Alternative)
+## 📋 Configuración Manual (Alternativa)
 
-### Train the Model
+### Entrenar el Modelo
 ```bash
 python train_model.py
 ```
 
-### Start Services Individually
+### Iniciar Servicios Individualmente
 ```bash
-# Terminal 1: Churn Prediction API
+# Terminal 1: API de Predicción de Abandono
 python api.py
 
-# Terminal 2: LLM Insights API  
+# Terminal 2: API de Insights LLM  
 python llm_api.py
 
-# Terminal 3: Taipy Dashboard
+# Terminal 3: Panel Taipy
 python churn_ui.py
 ```
 
-## 🎮 Using the Dashboards
+## 🎮 Usando los Paneles
 
-### Taipy Dashboard Features
-1. **Data Management**: Load data, apply filters, add customers
-2. **Churn Prediction**: Select customers, run predictions, view results
-3. **AI Insights**: Generate LLM-powered retention recommendations
+### Características del Panel Taipy
+1. **Gestión de Datos**: Cargar datos, aplicar filtros, agregar clientes
+2. **Predicción de Abandono**: Seleccionar clientes, ejecutar predicciones, ver resultados
+3. **Insights de IA**: Generar recomendaciones de retención impulsadas por LLM
 
-### Streamlit Dashboard Features
-1. **📊 Customer Data Tab**
-   - Interactive data table with sorting and filtering
-   - Customer selection with checkboxes
-   - Real-time summary statistics
-   - Advanced filtering sidebar
+### Características del Panel Streamlit
+1. **📊 Pestaña de Datos de Clientes**
+   - Tabla de datos interactiva con ordenamiento y filtrado
+   - Selección de clientes con casillas de verificación
+   - Estadísticas de resumen en tiempo real
+   - Barra lateral de filtrado avanzado
 
-2. **➕ Add Customer Tab**
-   - Comprehensive customer form
-   - All 30+ customer attributes
-   - Automatic personal info generation
-   - Form validation
+2. **➕ Pestaña Agregar Cliente**
+   - Formulario integral de cliente
+   - Todos los 30+ atributos de cliente
+   - Generación automática de información personal
+   - Validación de formulario
 
-3. **🤖 Predictions Tab**
-   - Customer profile visualization
-   - Real-time churn prediction
-   - Risk level indicators with color coding
-   - SHAP explainability plots
-   - Progress bars and gauges
+3. **🤖 Pestaña de Predicciones**
+   - Visualización del perfil del cliente
+   - Predicción de abandono en tiempo real
+   - Indicadores de nivel de riesgo con codificación de colores
+   - Gráficos de explicabilidad SHAP
+   - Barras de progreso y medidores
 
-4. **💡 Insights Tab**
-   - AI-powered retention strategies
-   - Risk gauge visualization
-   - Personalized recommendations
-   - Action-oriented insights
+4. **💡 Pestaña de Insights**
+   - Estrategias de retención impulsadas por IA
+   - Visualización de medidor de riesgo
+   - Recomendaciones personalizadas
+   - Insights orientados a la acción
 
-## API Endpoints
+5. **📊 Pestaña de Análisis Masivo**
+   - Procesamiento de múltiples clientes simultáneamente
+   - Predicciones e insights en lote
+   - Exportación de resultados a CSV
+   - Métricas de rendimiento de campaña
+
+6. **📧 Pestaña de Email Marketing**
+   - Campañas de email personalizadas basadas en riesgo
+   - Segmentación automática de clientes
+   - Plantillas HTML profesionales
+   - Múltiples formatos de exportación
+
+## Endpoints de API
 
 ### POST /predict
-Predict churn probability for a customer.
+Predice la probabilidad de abandono para un cliente.
 
-**Request body example:**
+**Ejemplo de cuerpo de solicitud:**
 ```json
 {
   "age": 35,
@@ -168,7 +180,7 @@ Predict churn probability for a customer.
 }
 ```
 
-**Response:**
+**Respuesta:**
 ```json
 {
   "churn_probability": 0.2345,
@@ -178,16 +190,16 @@ Predict churn probability for a customer.
 ```
 
 ### GET /health
-Check API health status.
+Verifica el estado de salud de la API.
 
 ### GET /model-info
-Get information about the loaded model.
+Obtiene información sobre el modelo cargado.
 
-## Data Requirements
+## Requisitos de Datos
 
-Your CSV file should contain these columns:
-- `user` (integer) - Row ID, will be excluded from features
-- `churn` (integer) - Target variable (0/1)
+Tu archivo CSV debe contener estas columnas:
+- `user` (integer) - ID de fila, será excluido de las características
+- `churn` (integer) - Variable objetivo (0/1)
 - `age` (integer)
 - `housing` (string)
 - `credit_score` (float)
@@ -218,84 +230,99 @@ Your CSV file should contain these columns:
 - `reward_rate` (float)
 - `is_referred` (integer)
 
-## 📁 Project Structure
+## 📁 Estructura del Proyecto
 
 ```
-├── train_model.py          # XGBoost model training
-├── api.py                  # Churn prediction API
-├── llm_api.py             # LLM insights API
-├── churn_ui.py            # Taipy dashboard
-├── streamlit_ui.py        # Streamlit dashboard
-├── test_api.py            # API testing script
-├── start_services.py      # Service orchestration
-├── run_streamlit.py       # Streamlit standalone runner
-├── requirements.txt       # Dependencies
-└── README.md             # Documentation
+├── train_model.py          # Entrenamiento del modelo XGBoost
+├── api.py                  # API de predicción de abandono
+├── llm_api.py             # API de insights LLM
+├── churn_ui.py            # Panel Taipy
+├── streamlit_ui.py        # Panel Streamlit
+├── test_api.py            # Script de prueba de API
+├── start_services.py      # Orquestación de servicios
+├── run_streamlit.py       # Ejecutor independiente de Streamlit
+├── requirements.txt       # Dependencias
+└── README.md             # Documentación
 ```
 
-## 🗂️ Generated Files
+## 🗂️ Archivos Generados
 
-- `churn_model.pkl` - Trained XGBoost model
-- `encoders.pkl` - Fitted encoders (Label or OneHot)
-- `model_metadata.json` - Feature columns and encoding metadata
-- `shap_plot.png` - SHAP explainability plots (when generated)
+- `churn_model.pkl` - Modelo XGBoost entrenado
+- `encoders.pkl` - Codificadores ajustados (Label o OneHot)
+- `model_metadata.json` - Columnas de características y metadatos de codificación
+- `shap_plot.png` - Gráficos de explicabilidad SHAP (cuando se generan)
 
-## 🔧 API Endpoints
+## 🔧 Endpoints de API
 
-### Churn Prediction API (Port 8000)
-- `POST /predict` - Predict churn for a customer
-- `GET /health` - Health check
-- `GET /model-info` - Model information
+### API de Predicción de Abandono (Puerto 8000)
+- `POST /predict` - Predecir abandono para un cliente
+- `GET /health` - Verificación de salud
+- `GET /model-info` - Información del modelo
 
-### LLM Insights API (Port 8001)
-- `POST /generate-insights` - Generate retention recommendations
-- `GET /health` - Health check
+### API de Insights LLM (Puerto 8001)
+- `POST /generate-insights` - Generar recomendaciones de retención
+- `GET /health` - Verificación de salud
 
-## 🎛️ Encoding Methods
+## 🎛️ Métodos de Codificación
 
-**LabelEncoder (Default):**
-- Converts categories to integers (0, 1, 2...)
-- Compact representation
-- Good for tree-based models like XGBoost
+**LabelEncoder (Por defecto):**
+- Convierte categorías a enteros (0, 1, 2...)
+- Representación compacta
+- Bueno para modelos basados en árboles como XGBoost
 
 **OneHotEncoder:**
-- Creates binary columns for each category
-- No ordinal assumptions
-- Better for capturing category relationships
+- Crea columnas binarias para cada categoría
+- Sin suposiciones ordinales
+- Mejor para capturar relaciones de categorías
 
-## 🔍 Dashboard Features
+## 🔍 Características del Panel
 
-### Data Management
-- **CSV Loading**: Load customer data from files
-- **Fake Data Generation**: Automatically add personal info columns
-- **Real-time Filtering**: Filter by age, credit score, housing
-- **Customer Addition**: Add new customers via form
+### Gestión de Datos
+- **Carga de CSV**: Cargar datos de clientes desde archivos
+- **Generación de Datos Falsos**: Agregar automáticamente columnas de información personal
+- **Filtrado en Tiempo Real**: Filtrar por edad, puntaje crediticio, vivienda
+- **Adición de Clientes**: Agregar nuevos clientes mediante formulario
 
-### Prediction & Analysis
-- **ML Predictions**: Real-time churn probability scoring
-- **Risk Classification**: Low/Medium/High risk levels
-- **SHAP Explanations**: Feature importance visualization
-- **Customer Selection**: Click-to-select interface
+### Predicción y Análisis
+- **Predicciones ML**: Puntuación de probabilidad de abandono en tiempo real
+- **Clasificación de Riesgo**: Niveles de riesgo Bajo/Medio/Alto
+- **Explicaciones SHAP**: Visualización de importancia de características
+- **Selección de Clientes**: Interfaz de clic para seleccionar
 
-### AI Insights
-- **Retention Strategies**: Personalized recommendations
-- **Action Items**: Specific intervention steps
-- **Risk Analysis**: Behavioral pattern insights
-- **Customer Profiling**: Comprehensive analysis
+### Insights de IA
+- **Estrategias de Retención**: Recomendaciones personalizadas
+- **Elementos de Acción**: Pasos específicos de intervención
+- **Análisis de Riesgo**: Insights de patrones de comportamiento
+- **Perfilado de Clientes**: Análisis integral
 
-## 🚨 Troubleshooting
+### Email Marketing
+- **Campañas Personalizadas**: Emails basados en nivel de riesgo del cliente
+- **Segmentación Automática**: Clasificación inteligente de clientes
+- **Plantillas Profesionales**: Contenido HTML responsivo en español
+- **Múltiples Exportaciones**: CSV, HTML, resumen y formato Mailchimp
 
-**Model Not Found Error:**
+## 🚨 Solución de Problemas
+
+**Error de Modelo No Encontrado:**
 ```bash
-python train_model.py  # Train the model first
+python train_model.py  # Entrenar el modelo primero
 ```
 
-**API Connection Error:**
-- Ensure all services are running
-- Check ports 8000, 8001, 5000 are available
-- Use `python start_services.py` for automatic startup
+**Error de Conexión de API:**
+- Asegurar que todos los servicios estén ejecutándose
+- Verificar que los puertos 8000, 8001, 5000 estén disponibles
+- Usar `python start_services.py` para inicio automático
 
-**Dashboard Not Loading:**
-- Check Taipy installation: `pip install taipy`
-- Verify port 5000 is available
-- Check browser console for errors
+**Panel No Carga:**
+- Verificar instalación de Taipy: `pip install taipy`
+- Verificar que el puerto 5000 esté disponible
+- Revisar la consola del navegador para errores
+
+**Error de Selectbox Duplicado en Streamlit:**
+- Este error se ha corregido agregando claves únicas a todos los elementos selectbox
+- Si persiste, reiniciar la aplicación Streamlit
+
+**Problemas de Email Marketing:**
+- Verificar que los datos de clientes incluyan campos de email
+- Asegurar que el análisis masivo se haya completado para mejores resultados
+- Revisar que los filtros de clientes no estén demasiado restrictivos
