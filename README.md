@@ -1,9 +1,10 @@
-# Fintech Churn Prediction System
+# 🏦 Fintech Churn Prediction System
 
-A complete machine learning system for predicting customer churn using XGBoost, with a real-time API for inference.
+A comprehensive machine learning system for predicting customer churn with an interactive dashboard, real-time API, and AI-powered insights.
 
-## Features
+## 🌟 Features
 
+### Core ML System
 - XGBoost classifier for churn prediction
 - FastAPI-based REST API for real-time predictions
 - Flexible categorical encoding: LabelEncoder or OneHotEncoder
@@ -11,21 +12,36 @@ A complete machine learning system for predicting customer churn using XGBoost, 
 - Model performance evaluation
 - Risk level classification (Low/Medium/High)
 
-## Setup
+### Interactive Dashboards
+**Taipy Dashboard** (`churn_ui.py`)
+- 📊 Data management with filtering and customer addition
+- 🤖 Real-time churn prediction interface
+- 💡 AI-powered customer retention insights
+- 📈 SHAP explainability plots
+- 🔍 Customer data exploration and analysis
 
-1. Install dependencies:
+**Streamlit Dashboard** (`streamlit_ui.py`)
+- 🎨 Modern, responsive web interface
+- 📊 Interactive data tables with AgGrid
+- 📈 Advanced visualizations with Plotly
+- 🎯 Customer profile radar charts
+- 🔢 Risk gauge indicators
+- 📱 Mobile-friendly design
+
+### AI Insights Engine
+- LLM-powered customer retention recommendations
+- Personalized action items based on customer profile
+- Risk-based intervention strategies
+- Behavioral pattern analysis
+
+## 🚀 Quick Start
+
+### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Prepare your data:
-   - Place your CSV file in the project directory
-   - Name it `churn_data.csv` or update the path in `train_model.py`
-
-## Usage
-
-### 1. Train the Model
-
+### 2. Train the Model
 ```bash
 python train_model.py
 ```
@@ -34,29 +50,83 @@ python train_model.py
 - Edit `train_model.py` and set `use_onehot = True` for OneHotEncoder
 - Set `use_onehot = False` for LabelEncoder (default)
 
-**OneHotEncoder vs LabelEncoder:**
-- **LabelEncoder**: Assigns integer values (0, 1, 2...) to categories. More compact but implies ordinal relationship.
-- **OneHotEncoder**: Creates binary columns for each category. No ordinal assumption but increases feature count.
+### 3. Start All Services
 
-This will:
-- Load and preprocess your churn data
-- Train an XGBoost classifier with your chosen encoding
-- Evaluate model performance
-- Save the trained model and metadata
-
-### 2. Start the API Server
-
+**Option A: Taipy Dashboard (Default)**
 ```bash
+python start_services.py
+```
+
+**Option B: Streamlit Dashboard**
+```bash
+python start_services.py --ui streamlit
+```
+
+**Option C: Streamlit Only**
+```bash
+python run_streamlit.py
+```
+
+This starts:
+- 🤖 Churn Prediction API (port 8000)
+- 💡 LLM Insights API (port 8001)  
+- 📊 Dashboard (Taipy: port 5000, Streamlit: port 8501)
+
+### 4. Access the Dashboard
+- **Taipy**: `http://localhost:5000`
+- **Streamlit**: `http://localhost:8501`
+
+## 📋 Manual Setup (Alternative)
+
+### Train the Model
+```bash
+python train_model.py
+```
+
+### Start Services Individually
+```bash
+# Terminal 1: Churn Prediction API
 python api.py
+
+# Terminal 2: LLM Insights API  
+python llm_api.py
+
+# Terminal 3: Taipy Dashboard
+python churn_ui.py
 ```
 
-The API will be available at `http://localhost:8000`
+## 🎮 Using the Dashboards
 
-### 3. Test the API
+### Taipy Dashboard Features
+1. **Data Management**: Load data, apply filters, add customers
+2. **Churn Prediction**: Select customers, run predictions, view results
+3. **AI Insights**: Generate LLM-powered retention recommendations
 
-```bash
-python test_api.py
-```
+### Streamlit Dashboard Features
+1. **📊 Customer Data Tab**
+   - Interactive data table with sorting and filtering
+   - Customer selection with checkboxes
+   - Real-time summary statistics
+   - Advanced filtering sidebar
+
+2. **➕ Add Customer Tab**
+   - Comprehensive customer form
+   - All 30+ customer attributes
+   - Automatic personal info generation
+   - Form validation
+
+3. **🤖 Predictions Tab**
+   - Customer profile visualization
+   - Real-time churn prediction
+   - Risk level indicators with color coding
+   - SHAP explainability plots
+   - Progress bars and gauges
+
+4. **💡 Insights Tab**
+   - AI-powered retention strategies
+   - Risk gauge visualization
+   - Personalized recommendations
+   - Action-oriented insights
 
 ## API Endpoints
 
@@ -148,24 +218,84 @@ Your CSV file should contain these columns:
 - `reward_rate` (float)
 - `is_referred` (integer)
 
-## Files Generated
+## 📁 Project Structure
+
+```
+├── train_model.py          # XGBoost model training
+├── api.py                  # Churn prediction API
+├── llm_api.py             # LLM insights API
+├── churn_ui.py            # Taipy dashboard
+├── streamlit_ui.py        # Streamlit dashboard
+├── test_api.py            # API testing script
+├── start_services.py      # Service orchestration
+├── run_streamlit.py       # Streamlit standalone runner
+├── requirements.txt       # Dependencies
+└── README.md             # Documentation
+```
+
+## 🗂️ Generated Files
 
 - `churn_model.pkl` - Trained XGBoost model
 - `encoders.pkl` - Fitted encoders (Label or OneHot)
 - `model_metadata.json` - Feature columns and encoding metadata
+- `shap_plot.png` - SHAP explainability plots (when generated)
 
-## Encoding Methods
+## 🔧 API Endpoints
+
+### Churn Prediction API (Port 8000)
+- `POST /predict` - Predict churn for a customer
+- `GET /health` - Health check
+- `GET /model-info` - Model information
+
+### LLM Insights API (Port 8001)
+- `POST /generate-insights` - Generate retention recommendations
+- `GET /health` - Health check
+
+## 🎛️ Encoding Methods
 
 **LabelEncoder (Default):**
 - Converts categories to integers (0, 1, 2...)
 - Compact representation
-- May imply false ordinal relationships
 - Good for tree-based models like XGBoost
 
 **OneHotEncoder:**
 - Creates binary columns for each category
 - No ordinal assumptions
-- Increases feature dimensionality
-- Better for linear models, also works well with XGBoost
+- Better for capturing category relationships
 
-Choose based on your data characteristics and model performance.
+## 🔍 Dashboard Features
+
+### Data Management
+- **CSV Loading**: Load customer data from files
+- **Fake Data Generation**: Automatically add personal info columns
+- **Real-time Filtering**: Filter by age, credit score, housing
+- **Customer Addition**: Add new customers via form
+
+### Prediction & Analysis
+- **ML Predictions**: Real-time churn probability scoring
+- **Risk Classification**: Low/Medium/High risk levels
+- **SHAP Explanations**: Feature importance visualization
+- **Customer Selection**: Click-to-select interface
+
+### AI Insights
+- **Retention Strategies**: Personalized recommendations
+- **Action Items**: Specific intervention steps
+- **Risk Analysis**: Behavioral pattern insights
+- **Customer Profiling**: Comprehensive analysis
+
+## 🚨 Troubleshooting
+
+**Model Not Found Error:**
+```bash
+python train_model.py  # Train the model first
+```
+
+**API Connection Error:**
+- Ensure all services are running
+- Check ports 8000, 8001, 5000 are available
+- Use `python start_services.py` for automatic startup
+
+**Dashboard Not Loading:**
+- Check Taipy installation: `pip install taipy`
+- Verify port 5000 is available
+- Check browser console for errors
