@@ -10,20 +10,20 @@ import shap
 
 # Load the trained models and metadata
 try:
-    XGBmodel = joblib.load('XGBoost_model.pkl')
+    XGBmodel = joblib.load('Modelos/XGBoost_model.pkl')
     
-    RFmodel = joblib.load('RandomForest_model.pkl')
+    RFmodel = joblib.load('Modelos/RandomForest_model.pkl')
     
-    with open('XGBoost_model_metadata.json', 'r') as f:
+    with open('Modelos/XGBoost_model_metadata.json', 'r') as f:
         XGBmetadata = json.load(f)
     
-    with open('RandomForest_model_metadata.json', 'r') as f:
+    with open('Modelos/RandomForest_model_metadata.json', 'r') as f:
         RFmetadata = json.load(f)
 
     feature_columns = XGBmetadata['feature_columns']
-    scaler =  joblib.load('XGBoost_model_scaler.pkl')
-    XGB_explainer = joblib.load('XGBoost_model_explainer.pkl')
-    RF_explainer = joblib.load('RandomForest_model_explainer.pkl')
+    scaler =  joblib.load('Modelos/XGBoost_model_scaler.pkl')
+    XGB_explainer = joblib.load('Modelos/XGBoost_model_explainer.pkl')
+    RF_explainer = joblib.load('Modelos/RandomForest_model_explainer.pkl')
 
 except FileNotFoundError:
     raise Exception("Model files not found. Please run train_model.py first.")

@@ -14,6 +14,40 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import Ollama local module for direct integration
+try:
+    from ollama_local import (
+        generate_ollama_insights,
+        CustomerInsightRequest as OllamaCustomerRequest,
+        OllamaConfig,
+        check_ollama_status,
+        get_available_models,
+        test_ollama_connection,
+        quick_generate_insights
+    )
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+
+# Feature flags to temporarily disable certain AI methods
+ENABLE_OLLAMA = False  # Temporarily disabled to avoid llm_api dependency
+ENABLE_TRANSFORMERS = False  # Temporarily disabled to avoid llm_api dependency
+ENABLE_GEMINI = True  # Keep Gemini enabled
+
+# Import Gemini API module for direct integration
+try:
+    from gemini_api_call import (
+        generate_gemini_insights,
+        quick_gemini_insights,
+        test_gemini_connection as test_gemini_conn,
+        GeminiConfig,
+        is_gemini_available,
+        get_available_models as get_gemini_models
+    )
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 # Page configuration
 st.set_page_config(
     page_title="Panel de Predicción de Abandono Fintech",
@@ -78,7 +112,9 @@ def load_sample_data():
         "left_for_one_month": np.random.binomial(1, 0.15, n_samples),
         "rewards_earned": np.random.poisson(100, n_samples),
         "reward_rate": np.random.uniform(0.01, 0.05, n_samples),
-        "is_referred": np.random.binomial(1, 0.3, n_samples)
+        "is_referred": np.random.binomial(1, 0.3, n_samples),
+        # "churn": np.random.binomial(1, 0.3, n_samples)
+        
     }
     
     df = pd.DataFrame(sample_data)
@@ -97,6 +133,8 @@ def add_personal_info_columns(df):
         df['phone'] = [fake.phone_number() for _ in range(len(df))]
     if 'address' not in df.columns:
         df['address'] = [fake.address().replace('\n', ', ') for _ in range(len(df))]
+    # if 'churn' not in df.columns:
+    #     df['churn'] = np.random.binomial(1, 0.3, n_samples)
 
 def get_display_value(column, value):
     """Get user-friendly display value for coded fields"""
@@ -166,6 +204,8 @@ def get_all_required_columns():
         'rewards_earned': 'integer',
         'reward_rate': 'float',
         'is_referred': 'binary'
+
+        
     }
 
 def generate_missing_data(df, column_name, data_type, num_rows):
@@ -495,7 +535,7 @@ def get_active_filters(filter_params):
     
     return active_filters
 
-def run_batch_analysis(filtered_data, include_predictions=True, include_insights=False, use_transformers=False):
+def run_batch_analysis(filtered_data, include_predictions=True, include_insights=False, use_transformers=False, use_ollama=False, ollama_model="llama3.2", use_gemini=False, gemini_model="gemini-2.5-flash"):
     """Run batch analysis on filtered customer data"""
     
     results = []
@@ -512,18 +552,30 @@ def run_batch_analysis(filtered_data, include_predictions=True, include_insights
             progress_bar.progress(progress)
             status_text.text(f"Procesando cliente {idx + 1} de {total_customers}: {customer.get('Name', 'Cliente')} {customer.get('Surname', '')}")
             
-            # Prepare customer result
-            customer_result = {
-                'Name': customer.get('Name', 'Desconocido'),
-                'Surname': customer.get('Surname', 'Cliente'),
-                'email': customer.get('email', 'N/A'),
-                'age': customer.get('age', 0),
-                'credit_score': customer.get('credit_score', 0),
-                'housing': customer.get('housing', 'N/A'),
-                'app_downloaded': customer.get('app_downloaded', 0),
-                'purchases': customer.get('purchases', 0),
-                'deposits': customer.get('deposits', 0)
+            # Prepare customer result - include ALL fields from the loaded CSV
+            customer_result = {}
+            
+            # Add all customer fields from the original data
+            for column in customer.index:
+                customer_result[column] = customer.get(column, None)
+            
+            # Ensure essential fields have default values if missing
+            essential_defaults = {
+                'Name': 'Desconocido',
+                'Surname': 'Cliente', 
+                'email': 'N/A',
+                'age': 0,
+                'credit_score': 0,
+                'housing': 'N/A',
+                'app_downloaded': 0,
+                'purchases': 0,
+                'deposits': 0
             }
+            
+            # Apply defaults only if fields are missing or None
+            for field, default_value in essential_defaults.items():
+                if field not in customer_result or customer_result[field] is None or pd.isna(customer_result[field]):
+                    customer_result[field] = default_value
             
             # Run predictions if requested
             if include_predictions:
@@ -559,32 +611,61 @@ def run_batch_analysis(filtered_data, include_predictions=True, include_insights
             
             # Run insights if requested
             if include_insights and include_predictions and customer_result.get('prediction_status') == 'Success':
+                # Create a mock prediction result for insights
+                mock_prediction = {
+                    'churn_probability_XGB': customer_result['churn_probability_XGB'],
+                    'risk_level_XGB': customer_result['risk_level_XGB'],
+                    'churn_prediction_XGB': customer_result['churn_prediction_XGB']
+                }
+                
+                # Generate rule-based insights (always)
                 try:
-                    # Create a mock prediction result for insights
-                    mock_prediction = {
-                        'churn_probability_XGB': customer_result['churn_probability_XGB'],
-                        'risk_level_XGB': customer_result['risk_level_XGB'],
-                        'churn_prediction_XGB': customer_result['churn_prediction_XGB']
-                    }
-                    
-                    insights, error = get_llm_insights(customer.to_dict(), mock_prediction, use_transformers)
-                    if insights:
-                        # Truncate insights for table display
-                        customer_result['insights'] = insights[:200] + "..." if len(insights) > 200 else insights
-                        customer_result['insights_full'] = insights
-                        customer_result['insights_status'] = 'Success'
+                    rule_insights, rule_error = get_llm_insights(customer.to_dict(), mock_prediction, 
+                                                               use_transformers=False, use_ollama=False)
+                    if rule_insights:
+                        customer_result['insights_rule_based'] = rule_insights  # Don't truncate
+                        customer_result['rule_based_status'] = 'Success'
                     else:
-                        customer_result['insights'] = f"Error: {error}"
-                        customer_result['insights_full'] = f"Error: {error}"
-                        customer_result['insights_status'] = 'Error'
+                        customer_result['insights_rule_based'] = f"Error: {rule_error}"
+                        customer_result['rule_based_status'] = 'Error'
                 except Exception as e:
-                    customer_result['insights'] = f"Exception: {str(e)}"
-                    customer_result['insights_full'] = f"Exception: {str(e)}"
-                    customer_result['insights_status'] = 'Error'
+                    customer_result['insights_rule_based'] = f"Exception: {str(e)}"
+                    customer_result['rule_based_status'] = 'Error'
+                
+                # Generate AI insights if requested (Gemini only)
+                
+                # Generate Gemini insights if requested
+                if use_gemini:
+                    try:
+                        gemini_insights, gemini_error = get_gemini_insights_direct(customer.to_dict(), mock_prediction, gemini_model)
+                        if gemini_insights:
+                            customer_result['insights_gemini'] = gemini_insights
+                            customer_result['gemini_status'] = 'Success'
+                            customer_result['gemini_model_used'] = gemini_model
+                        else:
+                            customer_result['insights_gemini'] = f"Error: {gemini_error}"
+                            customer_result['gemini_status'] = 'Error'
+                    except Exception as e:
+                        customer_result['insights_gemini'] = f"Exception: {str(e)}"
+                        customer_result['gemini_status'] = 'Error'
+                else:
+                    customer_result['insights_gemini'] = "No solicitado"
+                    customer_result['gemini_status'] = 'Skipped'
+                
+                # Set overall insights status
+                status_parts = [f"Rule-based: {customer_result.get('rule_based_status', 'Unknown')}"]
+                
+                if use_gemini:
+                    status_parts.append(f"Gemini: {customer_result.get('gemini_status', 'Unknown')}")
+                
+                customer_result['insights_status'] = ", ".join(status_parts)
+                
             elif include_insights:
-                customer_result['insights'] = "Requiere predicción exitosa"
-                customer_result['insights_full'] = "Requiere predicción exitosa"
-                customer_result['insights_status'] = 'Skipped'
+                customer_result['insights_rule_based'] = "Requiere predicción exitosa"
+                customer_result['insights_gemini'] = "Requiere predicción exitosa"
+                customer_result['rule_based_status'] = 'Skipped'
+                customer_result['gemini_status'] = 'Skipped'
+                customer_result['insights_status'] = 'Skipped - Requiere predicción exitosa'
             
             results.append(customer_result)
         
@@ -606,10 +687,8 @@ def prepare_batch_results_for_export(batch_results):
     # Create a copy for export
     export_df = batch_results.copy()
     
-    # Replace full insights if available
-    if 'insights_full' in export_df.columns:
-        export_df['insights'] = export_df['insights_full']
-        export_df = export_df.drop('insights_full', axis=1)
+    # Keep full insights without truncation (they're already full in the new implementation)
+    # No need to replace insights_full since we're not truncating anymore
     
     # Format numerical columns
     if 'churn_probability_XGB' in export_df.columns:
@@ -628,7 +707,10 @@ def generate_email_campaign_content(customer_data, campaign_type="retention", pe
     name = customer_data.get('Name', 'Cliente')
     age = customer_data.get('age', 30)
     credit_score = customer_data.get('credit_score', 650)
-    risk_level = customer_data.get('risk_level_XGB', 'Medium')
+    risk_level = str(customer_data.get('risk_level_XGB', 'Medium'))
+    # Ensure risk_level is a valid string value
+    if risk_level not in ['High', 'Medium', 'Low']:
+        risk_level = 'Medium'
     churn_prob = customer_data.get('churn_probability_XGB', 0.5)
     app_downloaded = customer_data.get('app_downloaded', 0)
     cc_taken = customer_data.get('cc_taken', 0)
@@ -913,6 +995,21 @@ def display_batch_results(batch_results, include_predictions, include_insights):
     # Summary statistics
     total_processed = len(batch_results)
     
+    # Debug: Show available columns
+    with st.expander("🔍 Debug: Columnas Disponibles"):
+        st.write("Columnas en batch_results:")
+        st.write(list(batch_results.columns))
+        if 'insights_gemini' in batch_results.columns:
+            st.success("✅ Columna 'insights_gemini' encontrada")
+            # Show sample of Gemini insights
+            gemini_sample = batch_results['insights_gemini'].dropna().head(3)
+            if len(gemini_sample) > 0:
+                st.write("Muestra de insights de Gemini:")
+                for idx, insight in gemini_sample.items():
+                    st.text_area(f"Cliente {idx}", value=str(insight)[:200] + "...", height=100, disabled=True)
+        else:
+            st.error("❌ Columna 'insights_gemini' NO encontrada")
+    
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -939,8 +1036,40 @@ def display_batch_results(batch_results, include_predictions, include_insights):
     
     if include_insights:
         st.markdown("### 💡 Resumen de Insights")
-        successful_insights = (batch_results.get('insights_status', pd.Series()) == 'Success').sum()
-        st.info(f"🧠 Insights generados exitosamente: {successful_insights} de {total_processed}")
+        
+        # Count successful insights by type
+        rule_based_success = 0
+        transformers_success = 0
+        ollama_success = 0
+        gemini_success = 0
+        
+        if 'rule_based_status' in batch_results.columns:
+            rule_based_success = (batch_results['rule_based_status'] == 'Success').sum()
+        
+        if 'transformers_status' in batch_results.columns:
+            transformers_success = (batch_results['transformers_status'] == 'Success').sum()
+            
+        if 'ollama_status' in batch_results.columns:
+            ollama_success = (batch_results['ollama_status'] == 'Success').sum()
+            
+        if 'gemini_status' in batch_results.columns:
+            gemini_success = (batch_results['gemini_status'] == 'Success').sum()
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"🤖 Insights Basados en Reglas: {rule_based_success} de {total_processed}")
+        with col2:
+            if 'transformers_status' in batch_results.columns:
+                st.info(f"🧠 Insights con Transformers: {transformers_success} de {total_processed}")
+            elif 'ollama_status' in batch_results.columns:
+                st.info(f"🦙 Insights con Ollama: {ollama_success} de {total_processed}")
+            else:
+                st.info("🧠 Insights con IA: No solicitados")
+        with col3:
+            if 'gemini_status' in batch_results.columns:
+                st.info(f"✨ Insights con Gemini: {gemini_success} de {total_processed}")
+            else:
+                st.info("✨ Insights con Gemini: No solicitados")
     
     # Filter and display options
     st.markdown("### 🔍 Filtrar Resultados")
@@ -968,12 +1097,54 @@ def display_batch_results(batch_results, include_predictions, include_insights):
             status_filter = "Todos"
     
     with filter_col3:
+        # Build default columns based on what's available
+        default_cols = ['Name', 'Surname', 'age', 'credit_score']
+        if include_predictions:
+            default_cols.extend(['churn_probability_XGB', 'risk_level_XGB'])
+        if include_insights:
+            default_cols.append('insights_rule_based')
+            # Add AI insights columns based on what was actually generated
+            if 'insights_transformers' in batch_results.columns:
+                default_cols.append('insights_transformers')
+            if 'insights_ollama' in batch_results.columns:
+                default_cols.append('insights_ollama')
+            if 'insights_gemini' in batch_results.columns:
+                default_cols.append('insights_gemini')
+        
+        # Filter to only include columns that actually exist
+        available_defaults = [col for col in default_cols if col in batch_results.columns]
+        
         show_columns = st.multiselect(
             "Columnas a Mostrar",
             options=list(batch_results.columns),
-            default=[col for col in ['Name', 'Surname', 'age', 'credit_score', 'churn_probability_XGB', 'risk_level_XGB', 'insights'] 
-                    if col in batch_results.columns][:7]  # Show first 7 relevant columns
+            default=available_defaults,
+            help="Selecciona las columnas que quieres ver en la tabla. Si no ves 'insights_gemini', verifica que esté en la lista de opciones."
         )
+        
+        # Quick access buttons for insights columns
+        if include_insights:
+            st.write("**Acceso rápido a insights:**")
+            col_a, col_b, col_c, col_d = st.columns(4)
+            with col_a:
+                if st.button("+ Reglas", help="Agregar insights basados en reglas"):
+                    if 'insights_rule_based' in batch_results.columns and 'insights_rule_based' not in show_columns:
+                        show_columns.append('insights_rule_based')
+                        st.rerun()
+            with col_b:
+                if 'insights_transformers' in batch_results.columns and st.button("+ Transformers"):
+                    if 'insights_transformers' not in show_columns:
+                        show_columns.append('insights_transformers')
+                        st.rerun()
+            with col_c:
+                if 'insights_ollama' in batch_results.columns and st.button("+ Ollama"):
+                    if 'insights_ollama' not in show_columns:
+                        show_columns.append('insights_ollama')
+                        st.rerun()
+            with col_d:
+                if 'insights_gemini' in batch_results.columns and st.button("+ Gemini"):
+                    if 'insights_gemini' not in show_columns:
+                        show_columns.append('insights_gemini')
+                        st.rerun()
     
     # Apply filters
     filtered_results = batch_results.copy()
@@ -1004,23 +1175,167 @@ def display_batch_results(batch_results, include_predictions, include_insights):
         if 'churn_probability_XGB' in display_df.columns:
             gb.configure_column('churn_probability_XGB', type=["numericColumn", "numberColumnFilter"], precision=4)
         
-        if 'insights' in display_df.columns:
-            gb.configure_column('insights', wrapText=True, autoHeight=True, width=300)
+        # Configure insights columns for better display
+        if 'insights_rule_based' in display_df.columns:
+            gb.configure_column('insights_rule_based', wrapText=True, autoHeight=True, width=400)
+        
+        if 'insights_transformers' in display_df.columns:
+            gb.configure_column('insights_transformers', wrapText=True, autoHeight=True, width=400)
+            
+        if 'insights_ollama' in display_df.columns:
+            gb.configure_column('insights_ollama', wrapText=True, autoHeight=True, width=400)
+            
+        if 'insights_gemini' in display_df.columns:
+            gb.configure_column('insights_gemini', wrapText=True, autoHeight=True, width=400)
         
         gridOptions = gb.build()
         
         # Display grid
-        AgGrid(
-            display_df,
-            gridOptions=gridOptions,
-            data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-            update_mode=GridUpdateMode.NO_UPDATE,
-            fit_columns_on_grid_load=True,
-            theme='streamlit',
-            enable_enterprise_modules=False,
-            height=500,
-            width='100%'
-        )
+        try:
+            AgGrid(
+                display_df,
+                gridOptions=gridOptions,
+                data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+                update_mode=GridUpdateMode.NO_UPDATE,
+                fit_columns_on_grid_load=True,
+                theme='streamlit',
+                enable_enterprise_modules=False,
+                height=500,
+                width='100%'
+            )
+        except Exception as e:
+            st.error(f"Error displaying grid: {e}")
+            st.write("Fallback display:")
+            st.dataframe(display_df, use_container_width=True)
+        
+        # Insights detailed view
+        if include_insights and len(filtered_results) > 0:
+            st.markdown("### 💡 Vista Detallada de Insights")
+            
+            # Customer selector for detailed insights view
+            if len(filtered_results) > 0:
+                customer_options = []
+                for idx, row in filtered_results.iterrows():
+                    name = row.get('Name', 'Cliente')
+                    surname = row.get('Surname', '')
+                    email = row.get('email', 'N/A')
+                    customer_options.append(f"{name} {surname} ({email})")
+                
+                selected_customer_idx = st.selectbox(
+                    "Seleccionar cliente para ver insights detallados:",
+                    range(len(customer_options)),
+                    format_func=lambda x: customer_options[x],
+                    key="batch_insights_customer_selector"
+                )
+                
+                if selected_customer_idx is not None:
+                    selected_row = filtered_results.iloc[selected_customer_idx]
+                    
+                    st.markdown(f"**Cliente:** {selected_row.get('Name', 'N/A')} {selected_row.get('Surname', '')}")
+                    st.markdown(f"**Riesgo:** {selected_row.get('risk_level_XGB', 'N/A')} ({selected_row.get('churn_probability_XGB', 0):.1%})")
+                    
+                    # Create tabs based on available insights
+                    tab_names = ["🤖 Insights Basados en Reglas"]
+                    if 'insights_transformers' in selected_row.index:
+                        tab_names.append("🧠 Insights con Transformers")
+                    if 'insights_ollama' in selected_row.index:
+                        tab_names.append("🦙 Insights con Ollama")
+                    if 'insights_gemini' in selected_row.index:
+                        tab_names.append("✨ Insights con Gemini")
+                    
+                    tabs = st.tabs(tab_names)
+                    
+                    # Rule-based insights tab
+                    with tabs[0]:
+                        rule_based_insights = selected_row.get('insights_rule_based', 'No disponible')
+                        rule_status = selected_row.get('rule_based_status', 'Unknown')
+                        
+                        if rule_status == 'Success':
+                            st.success("✅ Insights basados en reglas generados exitosamente")
+                            st.markdown("**Análisis:**")
+                            st.text_area(
+                                "Insights Basados en Reglas",
+                                value=rule_based_insights,
+                                height=400,
+                                key=f"rule_insights_{selected_customer_idx}",
+                                disabled=True
+                            )
+                        else:
+                            st.error(f"❌ Error en insights basados en reglas: {rule_status}")
+                            st.text(rule_based_insights)
+                    
+                    # AI insights tabs
+                    tab_idx = 1
+                    
+                    # Transformers tab
+                    if 'insights_transformers' in selected_row.index:
+                        with tabs[tab_idx]:
+                            transformer_insights = selected_row.get('insights_transformers', 'No disponible')
+                            transformer_status = selected_row.get('transformers_status', 'Unknown')
+                            
+                            if transformer_status == 'Success':
+                                st.success("✅ Insights con transformers generados exitosamente")
+                                st.markdown("**Análisis:**")
+                                st.text_area(
+                                    "Insights con Transformers",
+                                    value=transformer_insights,
+                                    height=400,
+                                    key=f"transformer_insights_{selected_customer_idx}",
+                                    disabled=True
+                                )
+                            elif transformer_status == 'Skipped':
+                                st.info("ℹ️ Insights con transformers no fueron solicitados")
+                            else:
+                                st.error(f"❌ Error en insights con transformers: {transformer_status}")
+                                st.text(transformer_insights)
+                        tab_idx += 1
+                    
+                    # Ollama tab
+                    if 'insights_ollama' in selected_row.index:
+                        with tabs[tab_idx]:
+                            ollama_insights = selected_row.get('insights_ollama', 'No disponible')
+                            ollama_status = selected_row.get('ollama_status', 'Unknown')
+                            ollama_model = selected_row.get('ollama_model_used', 'N/A')
+                            
+                            if ollama_status == 'Success':
+                                st.success(f"✅ Insights con Ollama generados exitosamente (Modelo: {ollama_model})")
+                                st.markdown("**Análisis:**")
+                                st.text_area(
+                                    "Insights con Ollama",
+                                    value=ollama_insights,
+                                    height=400,
+                                    key=f"ollama_insights_{selected_customer_idx}",
+                                    disabled=True
+                                )
+                            elif ollama_status == 'Skipped':
+                                st.info("ℹ️ Insights con Ollama no fueron solicitados")
+                            else:
+                                st.error(f"❌ Error en insights con Ollama: {ollama_status}")
+                                st.text(ollama_insights)
+                        tab_idx += 1
+                    
+                    # Gemini tab
+                    if 'insights_gemini' in selected_row.index:
+                        with tabs[tab_idx]:
+                            gemini_insights = selected_row.get('insights_gemini', 'No disponible')
+                            gemini_status = selected_row.get('gemini_status', 'Unknown')
+                            gemini_model = selected_row.get('gemini_model_used', 'N/A')
+                            
+                            if gemini_status == 'Success':
+                                st.success(f"✅ Insights con Gemini generados exitosamente (Modelo: {gemini_model})")
+                                st.markdown("**Análisis:**")
+                                st.text_area(
+                                    "Insights con Gemini",
+                                    value=gemini_insights,
+                                    height=400,
+                                    key=f"gemini_insights_{selected_customer_idx}",
+                                    disabled=True
+                                )
+                            elif gemini_status == 'Skipped':
+                                st.info("ℹ️ Insights con Gemini no fueron solicitados")
+                            else:
+                                st.error(f"❌ Error en insights con Gemini: {gemini_status}")
+                                st.text(gemini_insights)
         
         # Additional analysis
         if include_predictions and len(filtered_results) > 0:
@@ -1034,7 +1349,7 @@ def display_batch_results(batch_results, include_predictions, include_insights):
                     names=risk_counts.index,
                     title="Distribución de Niveles de Riesgo"
                 )
-                st.plotly_chart(fig_risk, use_container_width=True)
+                st.plotly_chart(fig_risk, use_container_width=True, key="risk_distribution_chart")
             
             # Churn probability distribution
             if 'churn_probability_XGB' in filtered_results.columns:
@@ -1046,7 +1361,7 @@ def display_batch_results(batch_results, include_predictions, include_insights):
                         title="Distribución de Probabilidades de Abandono",
                         nbins=20
                     )
-                    st.plotly_chart(fig_hist, use_container_width=True)
+                    st.plotly_chart(fig_hist, use_container_width=True, key="churn_probability_histogram")
     
     else:
         st.warning("⚠️ No hay resultados que coincidan con los filtros aplicados.")
@@ -1099,18 +1414,99 @@ def predict_churn(customer_data):
         return None, f"Error realizando predicción: {str(e)}"
 
 def check_llm_api_health():
-    """Check the health status of the LLM API"""
-    try:
-        response = requests.get("http://localhost:8001/health", timeout=5)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {"status": "error", "transformers_available": False, "rule_based_available": False}
-    except:
-        return {"status": "error", "transformers_available": False, "rule_based_available": False}
+    """Check the health status of Gemini and rule-based insights"""
+    # Return minimal health status focusing on available methods
+    return {
+        'llm_api_available': False,
+        'ollama_direct_available': False,
+        'ollama_api_available': False,
+        'transformers_available': False,
+        'gemini_direct_available': check_gemini_status_direct() if ENABLE_GEMINI else False,
+        'ollama_models': [],
+        'gemini_models': get_available_gemini_models_direct() if ENABLE_GEMINI else []
+    }
 
-def get_llm_insights(customer_data, prediction_result, use_transformers=False):
+
+def get_rule_based_insights(customer_data, prediction_result):
+    """Generate rule-based insights without any external API dependency"""
+    try:
+        # Extract key customer information
+        age = customer_data.get('age', 30)
+        credit_score = customer_data.get('credit_score', 650)
+        deposits = customer_data.get('deposits', 0)
+        purchases = customer_data.get('purchases', 0)
+        app_downloaded = customer_data.get('app_downloaded', 0)
+        churn_probability = prediction_result.get('churn_probability_XGB', 0)
+        risk_level = prediction_result.get('risk_level_XGB', 'Unknown')
+        
+        insights = []
+        
+        # Risk level analysis
+        if risk_level == 'High':
+            insights.append("🚨 CLIENTE DE ALTO RIESGO: Requiere atención inmediata para prevenir abandono.")
+        elif risk_level == 'Medium':
+            insights.append("⚠️ RIESGO MODERADO: Cliente en zona de precaución, implementar estrategias preventivas.")
+        else:
+            insights.append("✅ BAJO RIESGO: Cliente estable, mantener nivel de servicio actual.")
+        
+        # Age-based insights
+        if age < 25:
+            insights.append("👶 Cliente joven: Enfocar en productos digitales y experiencia móvil.")
+        elif age > 55:
+            insights.append("👴 Cliente maduro: Priorizar atención personalizada y canales tradicionales.")
+        
+        # Credit score insights
+        if credit_score < 600:
+            insights.append("💳 Crédito bajo: Ofrecer productos de mejora crediticia y educación financiera.")
+        elif credit_score > 750:
+            insights.append("⭐ Excelente crédito: Cliente premium, ofrecer productos exclusivos.")
+        
+        # Activity insights
+        if deposits < 3:
+            insights.append("📉 Baja actividad de depósitos: Incentivar uso regular con promociones.")
+        if purchases < 10:
+            insights.append("🛒 Pocas compras: Promover uso de tarjeta con cashback o descuentos.")
+        if app_downloaded == 0:
+            insights.append("📱 Sin app móvil: Promover descarga con incentivos exclusivos.")
+        
+        # Engagement recommendations
+        if churn_probability > 0.7:
+            insights.append("🎯 ACCIÓN URGENTE: Contactar en 24-48 horas con oferta de retención.")
+        elif churn_probability > 0.4:
+            insights.append("📞 Contacto preventivo: Programar llamada de seguimiento en próximos 7 días.")
+        
+        # Combine insights
+        final_insights = "\n\n".join([f"• {insight}" for insight in insights])
+        
+        return final_insights, None
+        
+    except Exception as e:
+        return None, f"Error generando insights basados en reglas: {str(e)}"
+
+def get_llm_insights(customer_data, prediction_result, use_transformers=False, use_ollama=False, ollama_model="llama3.2", use_gemini=False, gemini_model="gemini-2.5-flash"):
     """Get LLM insights for customer retention"""
+    
+    # If no AI method is specified, use rule-based insights
+    if not use_transformers and not use_ollama and not use_gemini:
+        return get_rule_based_insights(customer_data, prediction_result)
+    
+    # If using Gemini, try direct connection first (independent of LLM API)
+    if use_gemini:
+        try:
+            return get_gemini_insights_direct(customer_data, prediction_result, gemini_model)
+        except Exception as e:
+            st.warning(f"Gemini directo falló: {str(e)}, intentando con otros métodos...")
+            # Fall through to other methods
+    
+    # If using Ollama, try direct connection first (independent of LLM API)
+    if use_ollama:
+        try:
+            return get_ollama_insights_direct(customer_data, prediction_result, ollama_model)
+        except Exception as e:
+            st.warning(f"Ollama directo falló: {str(e)}, intentando con LLM API...")
+            # Fall through to LLM API method
+    
+    # Original LLM API method for transformers and rule-based
     try:
         # Prepare data for LLM API (exclude personal information)
         api_data = {k: v for k, v in customer_data.items() 
@@ -1124,8 +1520,10 @@ def get_llm_insights(customer_data, prediction_result, use_transformers=False):
             'risk_level': prediction_result.get('risk_level_XGB', prediction_result.get('risk_level', 'Unknown'))
         })
         
-        # Add transformers option
+        # Add AI method options
         api_data['use_transformers'] = use_transformers
+        api_data['use_ollama'] = use_ollama
+        api_data['ollama_model'] = ollama_model
         
         # Ensure all required fields are present with defaults
         required_fields = {
@@ -1179,7 +1577,18 @@ def get_llm_insights(customer_data, prediction_result, use_transformers=False):
         )
         
         if response.status_code == 200:
-            return response.json()['recommendations'], None
+            result = response.json()
+            
+            # Store debug information if using AI methods
+            if use_transformers or use_ollama:
+                # Store debug info in session state for display
+                if hasattr(st, 'session_state'):
+                    st.session_state.debug_prompt = result.get('debug_prompt', 'No disponible')
+                    st.session_state.debug_raw_response = result.get('debug_raw_response', 'No disponible')
+                    if use_ollama:
+                        st.session_state.debug_ollama_model = ollama_model
+            
+            return result['recommendations'], None
         else:
             return None, f"LLM API Error: {response.status_code} - {response.text}"
             
@@ -1188,14 +1597,251 @@ def get_llm_insights(customer_data, prediction_result, use_transformers=False):
     except Exception as e:
         return None, f"Error obteniendo insights de LLM: {str(e)}"
 
+def get_ollama_insights_direct(customer_data, prediction_result, ollama_model="llama3.2"):
+    """Get Ollama insights directly without going through LLM API"""
+    
+    if not OLLAMA_AVAILABLE:
+        raise Exception("Ollama module not available. Please ensure ollama_local.py is in the project directory.")
+    
+    try:
+        # Check if Ollama is running
+        if not check_ollama_status():
+            raise Exception("Ollama no está ejecutándose. Por favor inicia Ollama primero.")
+        
+        # Prepare customer data for Ollama
+        # Exclude personal information
+        clean_data = {k: v for k, v in customer_data.items() 
+                     if k not in ['Name', 'Surname', 'email', 'phone', 'address']}
+        
+        # Add prediction results
+        clean_data.update({
+            'churn_probability': prediction_result.get('churn_probability_XGB', prediction_result.get('churn_probability', 0)),
+            'churn_prediction': prediction_result.get('churn_prediction_XGB', prediction_result.get('churn_prediction', 0)),
+            'risk_level': prediction_result.get('risk_level_XGB', prediction_result.get('risk_level', 'Unknown'))
+        })
+        
+        # Ensure all required fields are present with defaults
+        required_fields = {
+            'age': 30,
+            'housing': 'r',
+            'credit_score': 650.0,
+            'deposits': 5,
+            'withdrawal': 3,
+            'purchases_partners': 10,
+            'purchases': 25,
+            'cc_taken': 0,
+            'cc_recommended': 0,
+            'cc_disliked': 0,
+            'cc_liked': 0,
+            'cc_application_begin': 0,
+            'app_downloaded': 0,
+            'web_user': 0,
+            'app_web_user': 0,
+            'ios_user': 0,
+            'android_user': 0,
+            'registered_phones': 1,
+            'payment_type': 'monthly',
+            'waiting_4_loan': 0,
+            'cancelled_loan': 0,
+            'received_loan': 0,
+            'rejected_loan': 0,
+            'left_for_two_month_plus': 0,
+            'left_for_one_month': 0,
+            'rewards_earned': 100,
+            'reward_rate': 0.02,
+            'is_referred': 0
+        }
+        
+        # Fill missing fields with defaults
+        for field, default_value in required_fields.items():
+            if field not in clean_data or clean_data[field] is None:
+                clean_data[field] = default_value
+        
+        # Convert to proper types
+        clean_data['housing'] = str(clean_data['housing'])
+        clean_data['payment_type'] = str(clean_data['payment_type'])
+        clean_data['risk_level'] = str(clean_data['risk_level'])
+        
+        # Create Ollama customer request
+        ollama_customer = OllamaCustomerRequest(**clean_data)
+        
+        # Create Ollama configuration with extended timeout
+        config = OllamaConfig(
+            model=ollama_model,
+            temperature=0.7,
+            top_p=0.9,
+            max_tokens=1000,
+            timeout=120  # Extended timeout for model loading
+        )
+        
+        # Generate insights using Ollama
+        insights, debug_info = generate_ollama_insights(ollama_customer, config)
+        
+        # Store debug information in session state
+        if hasattr(st, 'session_state'):
+            st.session_state.debug_prompt = debug_info.get('prompt', 'No disponible')
+            st.session_state.debug_raw_response = debug_info.get('raw_response', 'No disponible')
+            st.session_state.debug_ollama_model = ollama_model
+        
+        return insights, None
+        
+    except Exception as e:
+        return None, f"Error en Ollama directo: {str(e)}"
+
+def check_ollama_status_direct():
+    """Check Ollama status directly without LLM API"""
+    if not OLLAMA_AVAILABLE:
+        return False
+    
+    try:
+        return check_ollama_status()
+    except:
+        return False
+
+def get_available_ollama_models_direct():
+    """Get available Ollama models directly"""
+    if not OLLAMA_AVAILABLE:
+        return []
+    
+    try:
+        return get_available_models()
+    except:
+        return []
+
+def get_gemini_insights_direct(customer_data, prediction_result, gemini_model="gemini-2.5-flash"):
+    """Get Gemini insights directly without going through LLM API"""
+    
+    if not GEMINI_AVAILABLE:
+        raise Exception("Gemini module not available. Please ensure gemini_api_call.py is in the project directory.")
+    
+    try:
+        # Check if Gemini is available
+        if not is_gemini_available():
+            raise Exception("Gemini API key not configured. Please set GEMINI_API_KEY environment variable.")
+        
+        # Prepare customer data for Gemini
+        # Exclude personal information
+        clean_data = {k: v for k, v in customer_data.items() 
+                     if k not in ['Name', 'Surname', 'email', 'phone', 'address']}
+        
+        # Add prediction results
+        clean_data.update({
+            'churn_probability': prediction_result.get('churn_probability_XGB', prediction_result.get('churn_probability', 0)),
+            'churn_prediction': prediction_result.get('churn_prediction_XGB', prediction_result.get('churn_prediction', 0)),
+            'risk_level': prediction_result.get('risk_level_XGB', prediction_result.get('risk_level', 'Unknown'))
+        })
+        
+        # Ensure all required fields are present with defaults
+        required_fields = {
+            'age': 30,
+            'housing': 'r',
+            'credit_score': 650.0,
+            'deposits': 5,
+            'withdrawal': 3,
+            'purchases_partners': 10,
+            'purchases': 25,
+            'cc_taken': 0,
+            'cc_recommended': 0,
+            'cc_disliked': 0,
+            'cc_liked': 0,
+            'cc_application_begin': 0,
+            'app_downloaded': 0,
+            'web_user': 0,
+            'app_web_user': 0,
+            'ios_user': 0,
+            'android_user': 0,
+            'registered_phones': 1,
+            'payment_type': 'monthly',
+            'waiting_4_loan': 0,
+            'cancelled_loan': 0,
+            'received_loan': 0,
+            'rejected_loan': 0,
+            'left_for_two_month_plus': 0,
+            'left_for_one_month': 0,
+            'rewards_earned': 100,
+            'reward_rate': 0.02,
+            'is_referred': 0
+        }
+        
+        # Fill missing fields with defaults
+        for field, default_value in required_fields.items():
+            if field not in clean_data or clean_data[field] is None:
+                clean_data[field] = default_value
+        
+        # Convert to proper types
+        clean_data['housing'] = str(clean_data['housing'])
+        clean_data['payment_type'] = str(clean_data['payment_type'])
+        clean_data['risk_level'] = str(clean_data['risk_level'])
+        
+
+        
+        # Create Gemini configuration
+        config = GeminiConfig(
+            model=gemini_model,
+            temperature=0.7,
+            max_output_tokens=2048,
+            top_p=0.9,
+            timeout=30
+        )
+        
+        # Generate insights using Gemini
+        try:
+            insights, debug_info = generate_gemini_insights(clean_data, config)
+            
+            # Store debug information in session state
+            if hasattr(st, 'session_state'):
+                if debug_info and isinstance(debug_info, dict):
+                    st.session_state.debug_prompt = debug_info.get('prompt', 'No disponible')
+                    st.session_state.debug_raw_response = debug_info.get('raw_response', 'No disponible')
+                    st.session_state.debug_generation_time = debug_info.get('generation_time', 0)
+                else:
+                    st.session_state.debug_prompt = 'No disponible'
+                    st.session_state.debug_raw_response = 'No disponible'
+                    st.session_state.debug_generation_time = 0
+                st.session_state.debug_gemini_model = gemini_model
+            
+            return insights, None
+        except Exception as gemini_error:
+            # If Gemini fails, provide detailed error info
+            error_msg = str(gemini_error)
+            if hasattr(st, 'session_state'):
+                st.session_state.debug_prompt = f"Error al generar prompt: {error_msg}"
+                st.session_state.debug_raw_response = f"Error en respuesta: {error_msg}"
+                st.session_state.debug_generation_time = 0
+                st.session_state.debug_gemini_model = gemini_model
+            raise gemini_error
+        
+    except Exception as e:
+        return None, f"Error en Gemini directo: {str(e)}"
+
+def check_gemini_status_direct():
+    """Check Gemini status directly without LLM API"""
+    if not GEMINI_AVAILABLE:
+        return False
+    
+    try:
+        return is_gemini_available()
+    except:
+        return False
+
+def get_available_gemini_models_direct():
+    """Get available Gemini models directly"""
+    if not GEMINI_AVAILABLE:
+        return []
+    
+    try:
+        return get_gemini_models()
+    except:
+        return ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]  # Fallback list
+
 def generate_shap_plot(customer_data):
     """Generate SHAP waterfall plot for selected customer"""
     try:
         # Load the trained model and metadata (same as API)
-        model = joblib.load('XGBoost_model.pkl')
+        model = joblib.load('Modelos/XGBoost_model.pkl')
         
         # Load feature columns from metadata
-        with open('XGBoost_model_metadata.json', 'r') as f:
+        with open('Modelos/XGBoost_model_metadata.json', 'r') as f:
             metadata = json.load(f)
         feature_columns = metadata['feature_columns']
         
@@ -1318,7 +1964,7 @@ def main():
     st.markdown("---")
     
     # Sidebar for navigation and controls
-    st.sidebar.title("🎛️ Controles")
+    st.sidebar.title("🎛️ Menú")
     
     # Data Management Section
     st.sidebar.header("📊 Gestión de Datos")
@@ -1632,35 +2278,49 @@ def main():
                 st.info(f"📊 Mostrando {filtered_customers} de {total_customers} clientes ({filtered_customers/total_customers*100:.1f}%) - Filtros aplicados")
             
             # Enhanced summary statistics
-            col1, col2, col3, col4, col5 = st.columns(5)
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
             
             with col1:
                 st.metric("Total Filtrado", filtered_customers, 
                          delta=f"{filtered_customers - total_customers}" if filtered_customers != total_customers else None)
             
             with col2:
+                avg_deposits = st.session_state.filtered_data['deposits'].mean()
+                st.metric("Depósitos Promedio", f"{avg_deposits:.1f}")
+            
+            with col3:
                 avg_age = st.session_state.filtered_data['age'].mean()
                 overall_avg_age = st.session_state.data['age'].mean()
                 age_delta = avg_age - overall_avg_age
                 st.metric("Edad Promedio", f"{avg_age:.1f}", 
                          delta=f"{age_delta:+.1f}" if abs(age_delta) > 0.1 else None)
             
-            with col3:
+            with col4:
                 avg_credit = st.session_state.filtered_data['credit_score'].mean()
                 overall_avg_credit = st.session_state.data['credit_score'].mean()
                 credit_delta = avg_credit - overall_avg_credit
                 st.metric("Puntaje Crediticio", f"{avg_credit:.0f}", 
                          delta=f"{credit_delta:+.0f}" if abs(credit_delta) > 1 else None)
             
-            with col4:
+            with col5:
                 app_users = (st.session_state.filtered_data['app_downloaded'] == 1).sum()
                 app_percentage = (app_users / filtered_customers * 100) if filtered_customers > 0 else 0
-                st.metric("Usuarios de App", f"{app_users} ({app_percentage:.1f}%)")
+                st.markdown(f"""
+                <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px;">
+                    <p style="margin: 0; font-size: 14px; color: #262730;">Usuarios de App</p>
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: #262730;">{app_users} <span style="font-size: 14px;">({app_percentage:.1f}%)</span></p>
+                </div>
+                """, unsafe_allow_html=True)
             
-            with col5:
+            with col6:
                 high_activity = (st.session_state.filtered_data['purchases'] > 20).sum()
                 activity_percentage = (high_activity / filtered_customers * 100) if filtered_customers > 0 else 0
-                st.metric("Alta Actividad", f"{high_activity} ({activity_percentage:.1f}%)")
+                st.markdown(f"""
+                <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px;">
+                    <p style="margin: 0; font-size: 14px; color: #262730;">Alta Actividad</p>
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: #262730;">{high_activity} <span style="font-size: 14px;">({activity_percentage:.1f}%)</span></p>
+                </div>
+                """, unsafe_allow_html=True)
             
             # Additional insights row
             col1, col2, col3, col4 = st.columns(4)
@@ -1668,30 +2328,50 @@ def main():
             with col1:
                 cc_taken = (st.session_state.filtered_data['cc_taken'] == 1).sum()
                 cc_percentage = (cc_taken / filtered_customers * 100) if filtered_customers > 0 else 0
-                st.metric("Con Tarjeta Crédito", f"{cc_taken} ({cc_percentage:.1f}%)")
+                st.markdown(f"""
+                <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px;">
+                    <p style="margin: 0; font-size: 14px; color: #262730;">Con Tarjeta Crédito</p>
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: #262730;">{cc_taken} <span style="font-size: 14px;">({cc_percentage:.1f}%)</span></p>
+                </div>
+                """, unsafe_allow_html=True)
             
             with col2:
                 loan_received = (st.session_state.filtered_data['received_loan'] == 1).sum()
                 loan_percentage = (loan_received / filtered_customers * 100) if filtered_customers > 0 else 0
-                st.metric("Préstamos Recibidos", f"{loan_received} ({loan_percentage:.1f}%)")
+                st.markdown(f"""
+                <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px;">
+                    <p style="margin: 0; font-size: 14px; color: #262730;">Préstamos Recibidos</p>
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: #262730;">{loan_received} <span style="font-size: 14px;">({loan_percentage:.1f}%)</span></p>
+                </div>
+                """, unsafe_allow_html=True)
             
             with col3:
                 inactive_users = ((st.session_state.filtered_data['left_for_one_month'] == 1) | 
                                 (st.session_state.filtered_data['left_for_two_month_plus'] == 1)).sum()
                 inactive_percentage = (inactive_users / filtered_customers * 100) if filtered_customers > 0 else 0
-                st.metric("Usuarios Inactivos", f"{inactive_users} ({inactive_percentage:.1f}%)")
+                st.markdown(f"""
+                <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px;">
+                    <p style="margin: 0; font-size: 14px; color: #262730;">Usuarios Inactivos</p>
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: #262730;">{inactive_users} <span style="font-size: 14px;">({inactive_percentage:.1f}%)</span></p>
+                </div>
+                """, unsafe_allow_html=True)
             
             with col4:
                 referred_users = (st.session_state.filtered_data['is_referred'] == 1).sum()
                 referred_percentage = (referred_users / filtered_customers * 100) if filtered_customers > 0 else 0
-                st.metric("Usuarios Referidos", f"{referred_users} ({referred_percentage:.1f}%)")
+                st.markdown(f"""
+                <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px;">
+                    <p style="margin: 0; font-size: 14px; color: #262730;">Usuarios Referidos</p>
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: #262730;">{referred_users} <span style="font-size: 14px;">({referred_percentage:.1f}%)</span></p>
+                </div>
+                """, unsafe_allow_html=True)
             
             st.markdown("---")
             
             # Quick filters above the table
             st.subheader("🔍 Filtros Rápidos")
             
-            quick_col1, quick_col2, quick_col3, quick_col4 = st.columns(4)
+            quick_col1, quick_col2, quick_col3, quick_col4, quick_col5 = st.columns(5)
             
             with quick_col1:
                 if st.button("📱 Solo Usuarios de App"):
@@ -1724,6 +2404,11 @@ def main():
                         (st.session_state.filtered_data['left_for_one_month'] == 1) |
                         (st.session_state.filtered_data['left_for_two_month_plus'] == 1)
                     ]
+                    st.rerun()
+            
+            with quick_col5:
+                if st.button("🔄 Restablecer Filtros"):
+                    st.session_state.filtered_data = st.session_state.data.copy()
                     st.rerun()
             
             st.markdown("---")
@@ -2099,19 +2784,19 @@ def main():
                     # Age distribution
                     fig_age = px.histogram(data, x='age', title='Distribución por Edad', 
                                          color_discrete_sequence=['#1f77b4'])
-                    st.plotly_chart(fig_age, use_container_width=True)
+                    st.plotly_chart(fig_age, use_container_width=True, key="age_distribution_chart")
                     
                     # Credit score vs purchases
                     fig_scatter = px.scatter(data, x='credit_score', y='purchases', 
                                            title='Puntaje Crediticio vs Compras',
                                            color='housing')
-                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    st.plotly_chart(fig_scatter, use_container_width=True, key="credit_vs_purchases_scatter")
                     
                     # Housing type distribution
                     housing_counts = data['housing'].value_counts()
                     fig_pie = px.pie(values=housing_counts.values, names=housing_counts.index,
                                    title='Distribución por Tipo de Vivienda')
-                    st.plotly_chart(fig_pie, use_container_width=True)
+                    st.plotly_chart(fig_pie, use_container_width=True, key="housing_distribution_pie")
                 else:
                     st.warning("⚠️ No hay datos disponibles para el dashboard de ejemplo.")
     
@@ -2173,7 +2858,7 @@ def main():
                 # Customer profile chart
                 try:
                     fig = create_customer_summary_chart(customer)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key="customer_summary_chart")
                 except Exception as chart_error:
                     st.warning(f"No se pudo generar el gráfico del cliente: {str(chart_error)}")
             
@@ -2306,6 +2991,16 @@ def main():
     with tab5:
         st.header("💡 Insights de Cliente Impulsados por IA")
         
+        # Initialize session state for insights if not present
+        if 'rule_based_insights' not in st.session_state:
+            st.session_state.rule_based_insights = ""
+        if 'ai_insights' not in st.session_state:
+            st.session_state.ai_insights = ""
+        if 'show_debug_prompt' not in st.session_state:
+            st.session_state.show_debug_prompt = False
+        if 'show_debug_response' not in st.session_state:
+            st.session_state.show_debug_response = False
+        
         # Check if we have both customer selection and prediction
         if st.session_state.selected_customer is not None:
             customer = st.session_state.selected_customer
@@ -2352,65 +3047,237 @@ def main():
                 st.markdown("---")
             
             # Insights generation options
-            st.markdown("### 🤖 Opciones de Generación de Insights")
+            st.markdown("### 🤖 Generación de Insights Comparativos")
             
             # Check API health first
             api_health = check_llm_api_health()
             
-            col1, col2 = st.columns(2)
+            # AI Method Selection
+            st.markdown("#### Configuración de IA")
+            col_config1, col_config2 = st.columns(2)
+            
+            with col_config1:
+                # Build available AI methods based on feature flags
+                available_methods = ["Reglas"]
+                if ENABLE_GEMINI:
+                    available_methods.append("Gemini")
+                
+                ai_method = st.selectbox(
+                    "Método de IA:",
+                    available_methods,
+                    index=0,
+                    help="Selecciona el método para generar insights de IA"
+                )
+            
+            with col_config2:
+                if ai_method == "Gemini":
+                    # Gemini model selection
+                    gemini_models = get_available_gemini_models_direct()
+                    # Set default to gemini-2.5-flash if available
+                    default_index = 0
+                    if "gemini-2.5-flash" in gemini_models:
+                        default_index = gemini_models.index("gemini-2.5-flash")
+                    
+                    gemini_model = st.selectbox(
+                        "Modelo Gemini:",
+                        gemini_models,
+                        index=default_index,
+                        help="Selecciona el modelo de Gemini a usar (gemini-2.5-flash recomendado)"
+                    )
+                else:
+                    gemini_model = "gemini-2.5-flash"
+            
+            # Status indicators with detailed info
+            col_status1, col_status2 = st.columns(2)
+            with col_status1:
+                st.write("📊 Reglas:", "✅ Disponible")
+            
+            with col_status2:
+                # Gemini status
+                gemini_direct = api_health.get('gemini_direct_available', False)
+                gemini_status = "✅ Disponible" if gemini_direct else "❌ No configurado"
+                st.write("✨ Gemini:", gemini_status)
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
             
             with col1:
-                st.markdown("**🔧 Análisis Basado en Reglas**")
-                st.markdown("• Rápido y confiable")
-                st.markdown("• Basado en patrones establecidos")
-                st.markdown("• Siempre disponible")
-                
-                if st.button("📊 Generar Insights (Reglas)", type="secondary"):
+                if st.button("📊 Generar Insights Basados en Reglas", type="secondary"):
                     with st.spinner("Generando insights basados en reglas..."):
-                        insights, error = get_llm_insights(customer, st.session_state.prediction_result, use_transformers=False)
+                        insights, error = get_rule_based_insights(customer, st.session_state.prediction_result)
                         
                         if insights:
-                            st.session_state.llm_insights = insights
-                            st.session_state.insights_method = "Reglas"
-                            st.success("✅ Insights generados usando análisis basado en reglas")
+                            st.session_state.rule_based_insights = insights
+                            st.success("✅ Insights de reglas generados")
                         else:
                             st.error(f"❌ {error}")
             
             with col2:
-                st.markdown("**🧠 IA con Transformers**")
-                st.markdown("• Análisis más sofisticado")
-                st.markdown("• Respuestas más naturales")
-                st.markdown(f"• Estado: {'🟢 Disponible' if api_health.get('transformers_available') else '🔴 No disponible'}")
+                # Determine which AI method to use and if it's available
+                if ai_method == "Gemini":
+                    gemini_available = api_health.get('gemini_direct_available', False)
+                    ai_disabled = not gemini_available
+                    button_text = f"✨ Generar con Gemini ({gemini_model})"
+                else:
+                    ai_disabled = True
+                    button_text = "Selecciona método de IA"
                 
-                transformers_disabled = not api_health.get('transformers_available', False)
-                
-                if st.button("🤖 Generar Insights (IA)", type="primary", disabled=transformers_disabled):
-                    with st.spinner("Generando insights con IA (esto puede tomar unos momentos)..."):
-                        insights, error = get_llm_insights(customer, st.session_state.prediction_result, use_transformers=True)
+                if st.button(button_text, type="primary", disabled=ai_disabled):
+                    with st.spinner(f"Generando insights con {ai_method}..."):
+                        if ai_method == "Gemini":
+                            # Generate Gemini insights directly
+                            insights, error = get_gemini_insights_direct(customer, st.session_state.prediction_result, gemini_model)
                         
                         if insights:
-                            st.session_state.llm_insights = insights
-                            st.session_state.insights_method = "Transformers IA"
-                            st.success("✅ Insights generados usando IA con Transformers")
+                            st.session_state.ai_insights = insights
+                            st.success(f"✅ Insights de {ai_method} generados")
                         else:
                             st.error(f"❌ {error}")
-                            # Show fallback option
-                            st.info("💡 Prueba el análisis basado en reglas como alternativa")
+                            
+                            # Provide specific help for Gemini
+                            if ai_method == "Gemini" and ("API key" in str(error) or "authentication" in str(error).lower()):
+                                st.warning("🔧 **Configuración de Gemini API:**")
+                                st.markdown("""
+                                1. **Obtener API Key**: Visita [Google AI Studio](https://makersuite.google.com/app/apikey)
+                                2. **Configurar**: Ejecuta `python setup_gemini.py` para configuración automática
+                                3. **Variable de entorno**: `export GEMINI_API_KEY="tu-api-key"`
+                                4. **Verificar**: Ejecuta `python test_gemini_integration.py`
+                                """)
+                                
+                                if st.button("🔧 Configurar Gemini", key="setup_gemini"):
+                                    st.info("Ejecuta en terminal: `python setup_gemini.py`")
             
-            # Show API status
-            if not api_health.get('status') == 'saludable':
-                st.warning("⚠️ La API LLM no está disponible. Solo se pueden generar insights básicos.")
-            
-            # Display generated insights
-            if st.session_state.llm_insights:
-                method_used = getattr(st.session_state, 'insights_method', 'Desconocido')
+            with col3:
+                # Determine if any AI method is available
+                ai_available = False
+                if ai_method == "Gemini":
+                    ai_available = api_health.get('gemini_direct_available', False)
                 
+                if st.button("🧠 Generar Insights con IA", type="primary", disabled=not ai_available):
+                    with st.spinner(f"Generando insights con {ai_method}..."):
+                        # Generate AI insights based on selected method
+                        if ai_method == "Gemini" and api_health.get('gemini_direct_available', False):
+                            ai_insights, ai_error = get_gemini_insights_direct(customer, st.session_state.prediction_result, gemini_model)
+                            if ai_insights:
+                                st.session_state.ai_insights = ai_insights
+                                st.success(f"✅ Insights de {ai_method} generados")
+                            else:
+                                st.error(f"❌ Error en {ai_method}: {ai_error}")
+                        else:
+                            st.error(f"❌ {ai_method} no está disponible")
+            
+            # Show status info
+            if not api_health.get('gemini_direct_available', False):
+                st.info("💡 Los insights basados en reglas están siempre disponibles. Configura Gemini para análisis con IA.")
+            
+            # Display insights comparison
+            if st.session_state.rule_based_insights or st.session_state.ai_insights:
                 st.markdown("---")
-                st.markdown(f"### 📋 Estrategia de Retención (Método: {method_used})")
-                st.markdown(st.session_state.llm_insights)
+                st.markdown("### 📋 Comparación de Estrategias de Retención")
                 
-                # Additional visualization (using XGBoost results)
+                # Create two columns for side-by-side comparison
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("#### 🔧 Insights Basados en Reglas")
+                    if st.session_state.rule_based_insights:
+                        st.markdown(st.session_state.rule_based_insights)
+                        
+                        # Clear button for rule-based insights
+                        if st.button("�️ Limpiarp Insights de Reglas", key="clear_rules"):
+                            st.session_state.rule_based_insights = ""
+                            st.rerun()
+                    else:
+                        st.info("� Haz clic Ren 'Generar Insights Basados en Reglas' para ver el análisis")
+                
+                with col2:
+                    st.markdown("#### 🧠 Insights Generados por IA")
+                    if st.session_state.ai_insights:
+                        st.markdown(st.session_state.ai_insights)
+                        
+                        # Debug section for AI insights
+                        st.markdown("**🔍 Herramientas de Debug:**")
+                        debug_col1, debug_col2, debug_col3 = st.columns(3)
+                        
+                        with debug_col1:
+                            if st.button("🔍 Ver Prompt", type="secondary", key="show_prompt"):
+                                st.session_state.show_debug_prompt = True
+                        
+                        with debug_col2:
+                            if st.button("📄 Ver Respuesta", type="secondary", key="show_response"):
+                                st.session_state.show_debug_response = True
+                        
+                        with debug_col3:
+                            if st.button("⚙️ Ver Metadata", type="secondary", key="show_metadata"):
+                                st.session_state.show_debug_metadata = True
+                        
+                        # Clear button for AI insights
+                        if st.button("🗑️ Limpiar Insights de IA", key="clear_ai"):
+                            st.session_state.ai_insights = ""
+                            # Clear all debug information
+                            debug_attrs = ['debug_prompt', 'debug_raw_response', 'debug_gemini_model', 'debug_generation_time']
+                            for attr in debug_attrs:
+                                if hasattr(st.session_state, attr):
+                                    delattr(st.session_state, attr)
+                            # Clear debug display flags
+                            st.session_state.show_debug_prompt = False
+                            st.session_state.show_debug_response = False
+                            st.session_state.show_debug_metadata = False
+                            st.rerun()
+                    else:
+                        st.info("💡 Haz clic en 'Generar Insights con IA' para ver el análisis")
+                        if not api_health.get('transformers_available', False):
+                            st.warning("⚠️ IA no disponible - verifica que la API LLM esté ejecutándose")
+                
+                # Show debug information if requested (full width)
+                if getattr(st.session_state, 'show_debug_prompt', False):
+                    st.markdown("---")
+                    st.markdown("#### 🔍 Prompt Enviado al Modelo de IA")
+                    if hasattr(st.session_state, 'debug_prompt'):
+                        st.code(st.session_state.debug_prompt, language="text")
+                    else:
+                        st.warning("No hay información de prompt disponible")
+                    
+                    if st.button("❌ Ocultar Prompt", key="hide_prompt"):
+                        st.session_state.show_debug_prompt = False
+                        st.rerun()
+                
+                if getattr(st.session_state, 'show_debug_response', False):
+                    st.markdown("---")
+                    st.markdown("#### 📄 Respuesta Cruda del Modelo de IA")
+                    if hasattr(st.session_state, 'debug_raw_response'):
+                        st.code(st.session_state.debug_raw_response, language="text")
+                    else:
+                        st.warning("No hay información de respuesta cruda disponible")
+                    
+                    if st.button("❌ Ocultar Respuesta", key="hide_response"):
+                        st.session_state.show_debug_response = False
+                        st.rerun()
+                
+                if getattr(st.session_state, 'show_debug_metadata', False):
+                    st.markdown("---")
+                    st.markdown("#### ⚙️ Metadata del Modelo de IA")
+                    
+                    metadata_info = {}
+                    if hasattr(st.session_state, 'debug_gemini_model'):
+                        metadata_info['Modelo'] = st.session_state.debug_gemini_model
+                    if hasattr(st.session_state, 'debug_generation_time'):
+                        metadata_info['Tiempo de generación'] = f"{st.session_state.debug_generation_time:.2f} segundos"
+                    
+                    if metadata_info:
+                        for key, value in metadata_info.items():
+                            st.write(f"**{key}:** {value}")
+                    else:
+                        st.warning("No hay metadata disponible")
+                    
+                    if st.button("❌ Ocultar Metadata", key="hide_metadata"):
+                        st.session_state.show_debug_metadata = False
+                        st.rerun()
+                
+                # Risk visualization (show if we have insights)
                 if st.session_state.prediction_result:
+                    st.markdown("---")
+                    st.markdown("### 📊 Visualización de Riesgo")
+                    
                     risk_level = st.session_state.prediction_result.get('risk_level_XGB', 
                                st.session_state.prediction_result.get('risk_level', 'Unknown'))
                     prob = st.session_state.prediction_result.get('churn_probability_XGB', 
@@ -2436,19 +3303,54 @@ def main():
                                 'value': 90}}))
                     
                     fig.update_layout(height=300)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key="shap_waterfall_chart")
                 
-                # Option to clear insights
-                if st.button("🗑️ Limpiar Insights"):
-                    st.session_state.llm_insights = ""
-                    if hasattr(st.session_state, 'insights_method'):
-                        delattr(st.session_state, 'insights_method')
+                # Clear all insights button
+                st.markdown("---")
+                if st.button("🗑️ Limpiar Todos los Insights", type="secondary"):
+                    st.session_state.rule_based_insights = ""
+                    st.session_state.ai_insights = ""
+                    # Clear all debug information
+                    debug_attrs = ['debug_prompt', 'debug_raw_response', 'debug_gemini_model', 'debug_generation_time']
+                    for attr in debug_attrs:
+                        if hasattr(st.session_state, attr):
+                            delattr(st.session_state, attr)
+                    # Clear debug display flags
+                    st.session_state.show_debug_prompt = False
+                    st.session_state.show_debug_response = False
+                    st.session_state.show_debug_metadata = False
                     st.rerun()
-            
-            # Display existing insights if available
-            if st.session_state.llm_insights:
-                st.markdown("### 📝 Insights Anteriores")
-                st.markdown(st.session_state.llm_insights)
+                
+                # Additional visualization (using Random Forest results)
+                if st.session_state.prediction_result:
+                    risk_level = st.session_state.prediction_result.get('risk_level_RF', 
+                               st.session_state.prediction_result.get('risk_level', 'Unknown'))
+                    prob = st.session_state.prediction_result.get('churn_probability_RF', 
+                           st.session_state.prediction_result.get('churn_probability', 0))
+                    
+                    # Risk gauge (Random Forest)
+                    fig = go.Figure(go.Indicator(
+                        mode = "gauge+number+delta",
+                        value = prob * 100,
+                        domain = {'x': [0, 1], 'y': [0, 1]},
+                        title = {'text': "Riesgo de Abandono % (Random Forest)"},
+                        delta = {'reference': 50},
+                        gauge = {
+                            'axis': {'range': [None, 100]},
+                            'bar': {'color': "darkgreen"},  # Changed color to distinguish from XGBoost
+                            'steps': [
+                                {'range': [0, 30], 'color': "lightgreen"},
+                                {'range': [30, 70], 'color': "yellow"},
+                                {'range': [70, 100], 'color': "red"}],
+                            'threshold': {
+                                'line': {'color': "red", 'width': 4},
+                                'thickness': 0.75,
+                                'value': 90}}))
+                    
+                    fig.update_layout(height=300)
+                    st.plotly_chart(fig, use_container_width=True, key="rf_risk_gauge")
+                
+
                 
         elif st.session_state.selected_customer is None:
             st.info("👆 Por favor selecciona un cliente de la pestaña **Datos de Clientes** primero.")
@@ -2503,39 +3405,104 @@ def main():
                 st.markdown("• Predicción binaria")
         
         with col2:
-            include_insights = st.checkbox("🧠 Incluir Insights de IA", value=False)
-            if include_insights:
-                use_transformers_batch = st.checkbox("🤖 Usar Transformers (más lento)", value=False)
+            st.markdown("**🧠 Insights de Retención:**")
+            include_rule_insights = st.checkbox("📊 Insights Basados en Reglas", value=True)
+            include_ai_insights = st.checkbox("🤖 Insights Generados por IA", value=False)
+            
+            if include_ai_insights:
+                # Build available batch AI methods based on feature flags
+                available_batch_methods = []
+                if ENABLE_GEMINI:
+                    available_batch_methods.append("Gemini")
+                
+                if not available_batch_methods:
+                    st.error("No hay métodos de IA disponibles. Contacta al administrador.")
+                    return
+                
+                batch_ai_method = st.selectbox(
+                    "Método de IA para lote:",
+                    available_batch_methods,
+                    index=0,
+                    help="Selecciona el método para generar insights con IA"
+                )
+                
+                if batch_ai_method == "Gemini":
+                    # Gemini model selection for batch processing
+                    gemini_models = get_available_gemini_models_direct()
+                    # Set default to gemini-2.5-flash if available
+                    default_index = 0
+                    if "gemini-2.5-flash" in gemini_models:
+                        default_index = gemini_models.index("gemini-2.5-flash")
+                    
+                    batch_gemini_model = st.selectbox(
+                        "Modelo Gemini:",
+                        gemini_models,
+                        index=default_index,
+                        help="Modelo de Gemini para análisis en lote (gemini-2.5-flash recomendado)",
+                        key="batch_gemini_model"
+                    )
+                    use_gemini_batch = True
+                else:
+                    use_gemini_batch = False
+                    batch_gemini_model = "gemini-2.5-flash"
+                
                 st.markdown("• Recomendaciones personalizadas")
                 st.markdown("• Estrategias de retención")
                 st.markdown("• Acciones sugeridas")
+            else:
+                use_transformers_batch = False
+                use_ollama_batch = False
+                batch_ollama_model = "llama3.2"
         
         # Processing controls
         st.markdown("---")
         st.subheader("🚀 Ejecutar Análisis Masivo")
         
         # Estimate processing time
-        estimated_time_predictions = filtered_customers * 0.5  # ~0.5 seconds per prediction
-        estimated_time_insights = filtered_customers * 2 if include_insights else 0  # ~2 seconds per insight
-        total_estimated_time = estimated_time_predictions + estimated_time_insights
+        estimated_time_predictions = filtered_customers * 0.5 if include_predictions else 0  # ~0.5 seconds per prediction
         
-        st.info(f"⏱️ Tiempo estimado: {total_estimated_time:.0f} segundos para {filtered_customers} clientes")
+        estimated_time_rule_insights = filtered_customers * 1 if include_rule_insights else 0  # ~1 second per rule-based insight
+        
+        estimated_time_ai_insights = 0
+        if include_ai_insights:
+            if batch_ai_method == "Gemini":
+                estimated_time_ai_insights = filtered_customers * 20  # ~20 seconds per Gemini insight
+            
+        total_estimated_time = estimated_time_predictions + estimated_time_rule_insights + estimated_time_ai_insights
+        
+        # Build method description
+        methods = []
+        if include_predictions:
+            methods.append("Predicciones")
+        if include_rule_insights:
+            methods.append("Insights de Reglas")
+        if include_ai_insights:
+            methods.append(f"Insights de {batch_ai_method}")
+        
+        method_text = f" ({', '.join(methods)})" if methods else ""
+        st.info(f"⏱️ Tiempo estimado: {total_estimated_time:.0f} segundos para {filtered_customers} clientes{method_text}")
         
         # Batch processing button
         col1, col2, col3 = st.columns([2, 1, 1])
         
         with col1:
-            if st.button("🚀 Iniciar Análisis Masivo", type="primary", disabled=not (include_predictions or include_insights)):
+            if st.button("🚀 Iniciar Análisis Masivo", type="primary", disabled=not (include_predictions or include_rule_insights or include_ai_insights)):
                 # Initialize batch results in session state
                 if 'batch_results' not in st.session_state:
                     st.session_state.batch_results = None
                 
                 # Run batch processing
+                # Include insights if either rule-based or AI insights are requested
+                any_insights_requested = include_rule_insights or include_ai_insights
                 batch_results = run_batch_analysis(
                     st.session_state.filtered_data,
                     include_predictions=include_predictions,
-                    include_insights=include_insights,
-                    use_transformers=use_transformers_batch if include_insights else False
+                    include_insights=any_insights_requested,
+                    use_transformers=False,
+                    use_ollama=False,
+                    ollama_model="llama3.2",
+                    use_gemini=use_gemini_batch if include_ai_insights else False,
+                    gemini_model=batch_gemini_model if include_ai_insights else "gemini-2.5-flash"
                 )
                 
                 if batch_results is not None:
@@ -2564,7 +3531,9 @@ def main():
         
         # Display batch results
         if st.session_state.get('batch_results') is not None:
-            display_batch_results(st.session_state.batch_results, include_predictions, include_insights)
+            # Pass True for include_insights if either rule-based or AI insights were requested
+            any_insights_requested = include_rule_insights or include_ai_insights
+            display_batch_results(st.session_state.batch_results, include_predictions, any_insights_requested)
     
     with tab7:
         st.header("📧 Campaña de Email Marketing Personalizada")
@@ -2753,7 +3722,7 @@ def main():
                 names=segment_counts.index,
                 title="Distribución por Segmento de Campaña"
             )
-            st.plotly_chart(fig_segments, use_container_width=True)
+            st.plotly_chart(fig_segments, use_container_width=True, key="campaign_segments_chart")
             
             # Export options
             st.markdown("### 📥 Opciones de Exportación")

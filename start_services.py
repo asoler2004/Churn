@@ -40,7 +40,7 @@ def main():
     print("=" * 50)
     
     # Check if model files exist
-    if not os.path.exists('churn_model.pkl'):
+    if not os.path.exists('Modelos/churn_model.pkl'):
         print("❌ Model files not found!")
         print("Please run: python train_model.py")
         return

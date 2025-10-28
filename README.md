@@ -2,105 +2,99 @@
 
 Un sistema integral de aprendizaje automático para predecir el abandono de clientes con un panel interactivo, API en tiempo real e insights impulsados por IA.
 
+## 🌟 Fundamentación
+ - Ver: "Documentos/Análisis del Churn en Fintech.docx "
+
 ## 🌟 Características
 
-### Sistema ML Principal
-- Clasificador XGBoost para predicción de abandono
-- API REST basada en FastAPI para predicciones en tiempo real
-- Codificación categórica flexible: LabelEncoder o OneHotEncoder
-- Preprocesamiento automático de variables categóricas
-- Evaluación del rendimiento del modelo
-- Clasificación de nivel de riesgo (Bajo/Medio/Alto)
+### Datos Utilizados
+- Datos originales crudos: "churn_data.csv" (Dataset de Kaggle).
+- Datos limpios : "Fintech_user_limpio.csv"
+- Ver: "Documentos/Significado de los datos.doc"
+
+
+### Jupyter Notebooks
+- Notebook EDA:
+  **Exploración y Estadísticas Descriptivas:**
+      -  "Notebooks/Fintech_churn.ipynb"
+- Notebooks de Machine Learning: 
+  **Clasificadores XGBoost y Random Forest para predicción de abandono y Explicación de modelos con SHAP.** 
+      -  "Notebooks/churn_final.ipynb"
+  **Clasificador Red Neuronal para predicción de abandono y Explicación de modelo con SHAP**   
+      -  "Notebooks/Dataset_sintetico_red_neuronal.ipynb"
+
+   Estos notebooks generan los modelos entrenados en formato pkl que son incorporados a la api para inferencia en tiempo real.
+ 
+### API REST basada en FastAPI para predicciones en tiempo real
+  - "api.py"
+  Recibe un POST con los datos de un cliente, invoca los modelos desde sus archivos pkl, hace la predicción y entrega un objeto JSON con los resultados de las predicciones de los modelos RF y XGB:
+   - Probabilidad de churn %
+   - Predicción de churn: Si (1) o No (0)
+   - Nivel de riesgo (Bajo/Medio/Alto)
+   - Valores SHAP (Explicabilidad de las predicciones) Lista de importancia de variables en la predicción.  
+
 
 ### Paneles Interactivos
-**Panel Taipy** (`churn_ui.py`)
-- 📊 Gestión de datos con filtrado y adición de clientes
-- 🤖 Interfaz de predicción de abandono en tiempo real
-- 💡 Insights de retención de clientes impulsados por IA
-- 📈 Gráficos de explicabilidad SHAP
-- 🔍 Exploración y análisis de datos de clientes
 
 **Panel Streamlit** (`streamlit_ui.py`)
-- 🎨 Interfaz web moderna y responsiva
+- 🎨 Interfaz web 
 - 📊 Tablas de datos interactivas con AgGrid
 - 📈 Visualizaciones avanzadas con Plotly
 - 🎯 Gráficos de radar de perfil de cliente
 - 🔢 Indicadores de medidor de riesgo
-- 📱 Diseño amigable para móviles
 
-### Motor de Insights de IA
-- Recomendaciones de retención de clientes impulsadas por LLM
-- Elementos de acción personalizados basados en el perfil del cliente
-- Estrategias de intervención basadas en riesgo
-- Análisis de patrones de comportamiento
+
+
+**Motor de Insights de IA** (`llm_api.py` )
+API REST basada en FastAPI para predicciones en tiempo real
+  
+  Recibe un POST con los datos de un cliente más los datos de salida del modelo predictivo y entrega un objeto 
+  InsightResponse con: recommendations, key_insights y action_items.
+  Se probó con modelos preentrenados pequeños del Hub de Hugging Face: "distilgpt2", "gpt2",  "microsoft/DialoGPT-small", "microsoft/Phi-3-mini-4k-instruct",
+
+   - Recomendaciones de retención de clientes impulsadas por LLM
+   - Elementos de acción personalizados basados en el perfil del cliente
+   - Estrategias de intervención basadas en riesgo
+   - Análisis de patrones de comportamiento
+
 
 ## 🚀 Inicio Rápido
 
 ### 1. Instalar Dependencias
 ```bash
-pip install -r requirements.txt
+pip install -r requirements4.txt
 ```
 
-### 2. Entrenar el Modelo
-```bash
-python train_model.py
-```
+### 2. Los modelos de Machine Learning y sus Explainers SHAP se encuentran en los siguientes archivos:
 
-**Opciones de Codificación:**
-- Edita `train_model.py` y establece `use_onehot = True` para OneHotEncoder
-- Establece `use_onehot = False` para LabelEncoder (por defecto)
+      Modelos/RandomForest_model.pkl
+      Modelos/RandomForest_model_explainer.pkl
+      Modelos/XGBoost_model.pkl
+      Modelos/XGBoost_model_explainer.pkl
+
 
 ### 3. Iniciar Todos los Servicios
 
-**Opción A: Panel Taipy (Por defecto)**
+** Api de predicciones**
 ```bash
-python start_services.py
+python api.py
 ```
 
-**Opción B: Panel Streamlit**
-```bash
-python start_services.py --ui streamlit
-```
-
-**Opción C: Solo Streamlit**
+** UI de Streamlit**
 ```bash
 python run_streamlit.py
 ```
 
 Esto inicia:
 - 🤖 API de Predicción de Abandono (puerto 8000)
-- 💡 API de Insights LLM (puerto 8001)  
-- 📊 Panel (Taipy: puerto 5000, Streamlit: puerto 8501)
+- 📊 Panel (Streamlit: puerto 8501)
 
 ### 4. Acceder al Panel
-- **Taipy**: `http://localhost:5000`
+
 - **Streamlit**: `http://localhost:8501`
-
-## 📋 Configuración Manual (Alternativa)
-
-### Entrenar el Modelo
-```bash
-python train_model.py
-```
-
-### Iniciar Servicios Individualmente
-```bash
-# Terminal 1: API de Predicción de Abandono
-python api.py
-
-# Terminal 2: API de Insights LLM  
-python llm_api.py
-
-# Terminal 3: Panel Taipy
-python churn_ui.py
-```
 
 ## 🎮 Usando los Paneles
 
-### Características del Panel Taipy
-1. **Gestión de Datos**: Cargar datos, aplicar filtros, agregar clientes
-2. **Predicción de Abandono**: Seleccionar clientes, ejecutar predicciones, ver resultados
-3. **Insights de IA**: Generar recomendaciones de retención impulsadas por LLM
 
 ### Características del Panel Streamlit
 1. **📊 Pestaña de Datos de Clientes**
@@ -123,7 +117,7 @@ python churn_ui.py
    - Barras de progreso y medidores
 
 4. **💡 Pestaña de Insights**
-   - Estrategias de retención impulsadas por IA
+   - Estrategias de retención basadas en reglas e impulsadas por IA
    - Visualización de medidor de riesgo
    - Recomendaciones personalizadas
    - Insights orientados a la acción
@@ -233,96 +227,15 @@ Tu archivo CSV debe contener estas columnas:
 ## 📁 Estructura del Proyecto
 
 ```
-├── train_model.py          # Entrenamiento del modelo XGBoost
-├── api.py                  # API de predicción de abandono
-├── llm_api.py             # API de insights LLM
-├── churn_ui.py            # Panel Taipy
+├── Tests                  # Carpeta con tests usados en debugging
+├── Documentos             # Carpeta con documentación
+├── Datos                  # Carpeta con archivos de datos usados
+├── Modelos                # Carpeta con pkl de modelos entrenados 
+├── Notebooks              # Carpeta con Notebooks EDA y ML
+├── api.py                 # API de predicción de abandono
 ├── streamlit_ui.py        # Panel Streamlit
-├── test_api.py            # Script de prueba de API
 ├── start_services.py      # Orquestación de servicios
-├── run_streamlit.py       # Ejecutor independiente de Streamlit
-├── requirements.txt       # Dependencias
-└── README.md             # Documentación
+├── run_streamlit.py       # Ejecutor interface de Streamlit
+├── requirements4.txt      # Dependencias
+└── README.md              # Documentación
 ```
-
-## 🗂️ Archivos Generados
-
-- `churn_model.pkl` - Modelo XGBoost entrenado
-- `encoders.pkl` - Codificadores ajustados (Label o OneHot)
-- `model_metadata.json` - Columnas de características y metadatos de codificación
-- `shap_plot.png` - Gráficos de explicabilidad SHAP (cuando se generan)
-
-## 🔧 Endpoints de API
-
-### API de Predicción de Abandono (Puerto 8000)
-- `POST /predict` - Predecir abandono para un cliente
-- `GET /health` - Verificación de salud
-- `GET /model-info` - Información del modelo
-
-### API de Insights LLM (Puerto 8001)
-- `POST /generate-insights` - Generar recomendaciones de retención
-- `GET /health` - Verificación de salud
-
-## 🎛️ Métodos de Codificación
-
-**LabelEncoder (Por defecto):**
-- Convierte categorías a enteros (0, 1, 2...)
-- Representación compacta
-- Bueno para modelos basados en árboles como XGBoost
-
-**OneHotEncoder:**
-- Crea columnas binarias para cada categoría
-- Sin suposiciones ordinales
-- Mejor para capturar relaciones de categorías
-
-## 🔍 Características del Panel
-
-### Gestión de Datos
-- **Carga de CSV**: Cargar datos de clientes desde archivos
-- **Generación de Datos Falsos**: Agregar automáticamente columnas de información personal
-- **Filtrado en Tiempo Real**: Filtrar por edad, puntaje crediticio, vivienda
-- **Adición de Clientes**: Agregar nuevos clientes mediante formulario
-
-### Predicción y Análisis
-- **Predicciones ML**: Puntuación de probabilidad de abandono en tiempo real
-- **Clasificación de Riesgo**: Niveles de riesgo Bajo/Medio/Alto
-- **Explicaciones SHAP**: Visualización de importancia de características
-- **Selección de Clientes**: Interfaz de clic para seleccionar
-
-### Insights de IA
-- **Estrategias de Retención**: Recomendaciones personalizadas
-- **Elementos de Acción**: Pasos específicos de intervención
-- **Análisis de Riesgo**: Insights de patrones de comportamiento
-- **Perfilado de Clientes**: Análisis integral
-
-### Email Marketing
-- **Campañas Personalizadas**: Emails basados en nivel de riesgo del cliente
-- **Segmentación Automática**: Clasificación inteligente de clientes
-- **Plantillas Profesionales**: Contenido HTML responsivo en español
-- **Múltiples Exportaciones**: CSV, HTML, resumen y formato Mailchimp
-
-## 🚨 Solución de Problemas
-
-**Error de Modelo No Encontrado:**
-```bash
-python train_model.py  # Entrenar el modelo primero
-```
-
-**Error de Conexión de API:**
-- Asegurar que todos los servicios estén ejecutándose
-- Verificar que los puertos 8000, 8001, 5000 estén disponibles
-- Usar `python start_services.py` para inicio automático
-
-**Panel No Carga:**
-- Verificar instalación de Taipy: `pip install taipy`
-- Verificar que el puerto 5000 esté disponible
-- Revisar la consola del navegador para errores
-
-**Error de Selectbox Duplicado en Streamlit:**
-- Este error se ha corregido agregando claves únicas a todos los elementos selectbox
-- Si persiste, reiniciar la aplicación Streamlit
-
-**Problemas de Email Marketing:**
-- Verificar que los datos de clientes incluyan campos de email
-- Asegurar que el análisis masivo se haya completado para mejores resultados
-- Revisar que los filtros de clientes no estén demasiado restrictivos
