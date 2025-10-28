@@ -1,5 +1,5 @@
 {
-  "api_key": "AIzaSyDJPBegEABDXR7LLrXDAK5kdADp3QLesxk",
+  "api_key": <your api key>,
   "default_model": "gemini-2.5-flash",
   "default_temperature": 0.7,
   "default_max_tokens": 2048,
