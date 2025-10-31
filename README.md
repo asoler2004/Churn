@@ -1,4 +1,8 @@
 # 🏦 Sistema de Predicción de Abandono Fintech
+## Simulación No Country octubre 2025 - Nro de equipo 78 
+
+Antonia Soler https://www.linkedin.com/in/antonia-soler-7a2811230/ Panei Julia https://www.linkedin.com/in/julia-panei/ 
+
 
 Un sistema integral de aprendizaje automático para predecir el abandono de clientes con un panel interactivo, API en tiempo real e insights impulsados por IA.
 
